@@ -78,4 +78,16 @@ abstract class CanvasObject {
       );
     }
   }
+
+  // Helper method to get display name for object type
+  String getDisplayTypeName() {
+    final typeName = runtimeType.toString();
+    if (typeName == 'CanvasRectangle') return 'Rectangle';
+    if (typeName == 'CanvasCircle') return 'Circle';
+    if (typeName == 'StickyNote') return 'Sticky Note';
+    if (typeName == 'Connector') return 'Connector';
+    if (typeName == 'DocumentBlock') return 'Document';
+    if (typeName == 'FreehandPath') return 'Drawing';
+    return typeName;
+  }
 }

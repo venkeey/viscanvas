@@ -149,6 +149,11 @@ class CanvasService extends ChangeNotifier {
     notifyListeners();
   }
 
+  void selectObjectById(String objectId) {
+    _selectObjectUseCase.execute(objectId, multiSelect: false);
+    notifyListeners();
+  }
+
   // Transform management
   void updateTransform(Offset pan, double newScale) {
     _transformService.updateTransform(Transform2D(

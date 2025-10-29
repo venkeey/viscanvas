@@ -12,6 +12,7 @@ import '../utils/logger.dart';
 import 'canvas_widgets.dart';
 import 'canvas_painter.dart';
 import 'document_editor_overlay.dart';
+import 'draggable_right_panel.dart';
 
 // ===== 4. PRESENTATION LAYER =====
 
@@ -467,13 +468,6 @@ class _CanvasScreenState extends State<CanvasScreen> {
                           ),
                         ),
 
-                      // Properties Panel
-                      Positioned(
-                        top: 16,
-                        right: 16,
-                        child: PropertiesPanel(service: _service),
-                      ),
-
                       // Bottom Controls
                       Positioned(
                         bottom: 16,
@@ -481,12 +475,8 @@ class _CanvasScreenState extends State<CanvasScreen> {
                         child: BottomControls(service: _service),
                       ),
 
-                      // Auto-save Controls
-                      Positioned(
-                        bottom: 16,
-                        right: 16,
-                        child: AutoSaveControls(service: _service),
-                      ),
+                      // Draggable Right Panel (contains PropertiesPanel and AutoSaveControls)
+                      DraggableRightPanel(service: _service),
 
                       // Performance Metrics
                       Positioned(
