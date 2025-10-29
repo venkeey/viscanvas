@@ -35,7 +35,7 @@ class _CanvasScreenState extends State<CanvasScreen> {
     _service = CanvasService();
     _service.onOpenDocumentEditor = _openDocumentEditor;
 
-    // _focusNode.requestFocus(); // Temporarily disabled to test keyboard issue
+    _focusNode.requestFocus(); // Enable keyboard focus for backspace deletion
   }
 
   @override
