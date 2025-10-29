@@ -55,7 +55,7 @@ class CanvasService extends ChangeNotifier {
     // Initialize delegate services
     _persistenceService = CanvasPersistenceService(_repository, _commandHistory);
     _connectorService = CanvasConnectorService(_repository, _commandHistory, _hitTestUseCase);
-    _toolsService = CanvasToolsService(_repository, _commandHistory, _selectObjectUseCase, _hitTestUseCase);
+    _toolsService = CanvasToolsService(_repository, _commandHistory, _selectObjectUseCase, _hitTestUseCase, _connectorService);
     _documentService = CanvasDocumentService(_repository, _commandHistory);
     _transformService = CanvasTransformService();
 

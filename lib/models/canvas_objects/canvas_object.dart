@@ -1,6 +1,14 @@
 import 'package:flutter/material.dart';
 
-enum ResizeHandle { none, topLeft, topCenter, topRight, centerLeft, centerRight, bottomLeft, bottomCenter, bottomRight, top, bottom, left, right }
+enum ResizeHandle { 
+  none, 
+  topLeft, topCenter, topRight, 
+  centerLeft, centerRight, 
+  bottomLeft, bottomCenter, bottomRight, 
+  top, bottom, left, right,
+  // Connector handles - split into 4 equal parts
+  connectorStart, connectorEnd, connectorFirstQuarter, connectorThirdQuarter
+}
 
 abstract class CanvasObject {
   String id;

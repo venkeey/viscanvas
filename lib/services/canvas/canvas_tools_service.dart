@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../domain/canvas_domain.dart';
+import '../../domain/connector_system.dart';
 import '../../models/canvas_objects/canvas_object.dart';
 import '../../models/canvas_objects/freehand_path.dart';
 import '../../models/canvas_objects/canvas_rectangle.dart';
@@ -10,12 +11,14 @@ import '../../models/canvas_objects/sticky_note.dart';
 import '../../models/canvas_objects/document_block.dart';
 import '../../models/canvas_objects/connector.dart';
 import '../../utils/logger.dart';
+import 'canvas_connector_service.dart';
 
 class CanvasToolsService {
   final InMemoryCanvasRepository _repository;
   final CommandHistory _commandHistory;
   final SelectObjectUseCase _selectObjectUseCase;
   final HitTestUseCase _hitTestUseCase;
+  final CanvasConnectorService _connectorService;
 
   // Callbacks
   void Function(ToolType)? onToolChanged;
@@ -43,6 +46,7 @@ class CanvasToolsService {
     this._commandHistory,
     this._selectObjectUseCase,
     this._hitTestUseCase,
+    this._connectorService,
   );
 
   // ===== PUBLIC API =====
@@ -61,11 +65,13 @@ class CanvasToolsService {
       if (hitObj != null && hitObj is! Connector) {
         // Start drag connection from object - delegate to connector service
         CanvasLogger.canvasService('Connector drag start from ${hitObj.runtimeType}(${hitObj.id})');
+        _connectorService.startDragConnection(hitObj, worldPoint);
         onToolChanged?.call(ToolType.connector);
         return;
       } else {
         // Start freehand connection - delegate to connector service
         CanvasLogger.canvasService('Connector freehand start');
+        _connectorService.startFreehandConnection(worldPoint, strokeColor, strokeWidth);
         onToolChanged?.call(ToolType.connector);
         return;
       }
@@ -114,6 +120,11 @@ class CanvasToolsService {
 
     if (currentTool == ToolType.connector) {
       // Update connector drawing - delegate to connector service
+      if (_connectorService.connectorSourceObject != null) {
+        _connectorService.updateDragConnection(worldPoint);
+      } else if (_connectorService.currentFreehandConnector != null) {
+        _connectorService.updateFreehandConnection(worldPoint);
+      }
       return;
     }
 
@@ -124,7 +135,14 @@ class CanvasToolsService {
       if (_resizeHandle != ResizeHandle.none) {
         final selectedObj = _repository.getSelected().first;
         final worldDelta = worldPoint - _dragStart!;
-        selectedObj.resize(_resizeHandle, worldDelta, _initialWorldPosition!, _initialBounds!);
+        
+        // Handle connector-specific resize handles
+        if (selectedObj is Connector && _isConnectorHandle(_resizeHandle)) {
+          _handleConnectorResize(selectedObj, _resizeHandle, worldPoint);
+        } else {
+          selectedObj.resize(_resizeHandle, worldDelta, _initialWorldPosition!, _initialBounds!);
+        }
+        
         // Update connectors for resized object
         _updateConnectors(movedObjectIds: {selectedObj.id});
         onObjectModified?.call();
@@ -154,6 +172,11 @@ class CanvasToolsService {
     CanvasLogger.canvasService('onPanEnd tool=$currentTool');
     if (currentTool == ToolType.connector) {
       // End connector drawing - delegate to connector service
+      if (_connectorService.connectorSourceObject != null) {
+        _connectorService.endDragConnection(_lastWorldPoint ?? Offset.zero);
+      } else if (_connectorService.currentFreehandConnector != null) {
+        _connectorService.endFreehandConnection(_lastWorldPoint ?? Offset.zero);
+      }
       _lastWorldPoint = null;
       return;
     }
@@ -397,6 +420,11 @@ class CanvasToolsService {
   }
 
   ResizeHandle _getResizeHandle(CanvasObject obj, Offset screenPoint, Transform2D transform) {
+    // Special handling for connectors
+    if (obj is Connector) {
+      return _getConnectorResizeHandle(obj, screenPoint, transform);
+    }
+    
     final bounds = obj.getBoundingRect();
     final path = Path()..addRect(bounds);
     final transformedPath = path.transform(transform.matrix.storage);
@@ -423,6 +451,77 @@ class CanvasToolsService {
     }
 
     return ResizeHandle.none;
+  }
+  
+  ResizeHandle _getConnectorResizeHandle(Connector connector, Offset screenPoint, Transform2D transform) {
+    const handleSize = 14.0;
+    
+    // Transform handle positions to screen coordinates
+    final startScreen = transform.worldToScreen(connector.startHandle);
+    final endScreen = transform.worldToScreen(connector.endHandle);
+    final firstQuarterScreen = transform.worldToScreen(connector.firstQuarterHandle);
+    final thirdQuarterScreen = transform.worldToScreen(connector.thirdQuarterHandle);
+    
+    final handles = {
+      ResizeHandle.connectorStart: startScreen,
+      ResizeHandle.connectorEnd: endScreen,
+      ResizeHandle.connectorFirstQuarter: firstQuarterScreen,
+      ResizeHandle.connectorThirdQuarter: thirdQuarterScreen,
+    };
+    
+    for (var entry in handles.entries) {
+      final handleRect = Rect.fromCenter(center: entry.value, width: handleSize, height: handleSize);
+      if (handleRect.contains(screenPoint)) {
+        return entry.key;
+      }
+    }
+    
+    return ResizeHandle.none;
+  }
+
+  bool _isConnectorHandle(ResizeHandle handle) {
+    return handle == ResizeHandle.connectorStart ||
+           handle == ResizeHandle.connectorEnd ||
+           handle == ResizeHandle.connectorFirstQuarter ||
+           handle == ResizeHandle.connectorThirdQuarter;
+  }
+  
+  void _handleConnectorResize(Connector connector, ResizeHandle handle, Offset worldPoint) {
+    switch (handle) {
+      case ResizeHandle.connectorStart:
+        // Snap to nearest edge of source object
+        final newSourcePoint = ConnectorCalculator.getClosestEdgePoint(connector.sourceObject, worldPoint);
+        connector.sourcePoint = newSourcePoint;
+        connector.updatePoints();
+        break;
+        
+      case ResizeHandle.connectorEnd:
+        // Snap to nearest edge of target object
+        final newTargetPoint = ConnectorCalculator.getClosestEdgePoint(connector.targetObject, worldPoint);
+        connector.targetPoint = newTargetPoint;
+        connector.updatePoints();
+        break;
+        
+      case ResizeHandle.connectorFirstQuarter:
+      case ResizeHandle.connectorThirdQuarter:
+        // Adjust curvature based on vertical drag
+        final currentQuarter = handle == ResizeHandle.connectorFirstQuarter 
+            ? connector.firstQuarterHandle 
+            : connector.thirdQuarterHandle;
+        final deltaY = worldPoint.dy - currentQuarter.dy;
+        
+        // Adjust curvature scale based on vertical movement
+        // Both quarter handles adjust curvature in the same direction
+        final curvatureDelta = deltaY * 0.01;
+        connector.curvatureScale = (connector.curvatureScale + curvatureDelta).clamp(0.1, 3.0);
+        
+        // Invalidate cached path and control points
+        connector.invalidatePathCache();
+        break;
+        
+      default:
+        break;
+    }
   }
 
   void _updateConnectors({Set<String>? movedObjectIds}) {

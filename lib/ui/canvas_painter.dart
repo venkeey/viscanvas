@@ -1,9 +1,9 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import '../services/canvas/canvas_service.dart';
-import '../domain/connector_system.dart';
+import '../domain/canvas_domain.dart';
 import '../models/canvas_objects/canvas_object.dart';
 import '../models/canvas_objects/canvas_circle.dart';
+import '../models/canvas_objects/connector.dart';
 
 // ===== CANVAS PAINTER =====
 
@@ -42,7 +42,11 @@ class AdvancedCanvasPainter extends CustomPainter {
     canvas.restore();
 
     for (var obj in service.objects.where((o) => o.isSelected)) {
-      obj.drawBoundingBox(canvas, service.transform.matrix);
+      if (obj is Connector) {
+        _drawConnectorHandles(canvas, obj, service.transform);
+      } else {
+        obj.drawBoundingBox(canvas, service.transform.matrix);
+      }
     }
   }
 
@@ -134,14 +138,7 @@ class AdvancedCanvasPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
 
-    // Draw dashed effect
-    final dashPaint = Paint()
-      ..color = service.connectorHoverTarget != null
-          ? Colors.blue.withOpacity(0.8)
-          : service.strokeColor.withOpacity(0.6)
-      ..strokeWidth = service.strokeWidth
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
+    // Note: dashPaint was defined but not used - removed for now
 
     // Create curved path
     final path = Path();
@@ -174,6 +171,48 @@ class AdvancedCanvasPainter extends CustomPainter {
     if (service.connectorHoverTarget != null) {
       canvas.drawCircle(targetAnchorPos, 4, anchorPaint);
     }
+  }
+
+  void _drawConnectorHandles(Canvas canvas, Connector connector, Transform2D transform) {
+    const handleSize = 14.0;
+    
+    // Transform handle positions to screen coordinates
+    final startScreen = transform.worldToScreen(connector.startHandle);
+    final endScreen = transform.worldToScreen(connector.endHandle);
+    final firstQuarterScreen = transform.worldToScreen(connector.firstQuarterHandle);
+    final thirdQuarterScreen = transform.worldToScreen(connector.thirdQuarterHandle);
+    
+    // Draw start and end handles (blue)
+    final startEndPaint = Paint()
+      ..color = Colors.blue
+      ..style = PaintingStyle.fill;
+    
+    final startEndBorderPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
+    
+    canvas.drawCircle(startScreen, handleSize / 2, startEndPaint);
+    canvas.drawCircle(startScreen, handleSize / 2, startEndBorderPaint);
+    
+    canvas.drawCircle(endScreen, handleSize / 2, startEndPaint);
+    canvas.drawCircle(endScreen, handleSize / 2, startEndBorderPaint);
+    
+    // Draw quarter handles (orange)
+    final quarterPaint = Paint()
+      ..color = Colors.orange
+      ..style = PaintingStyle.fill;
+    
+    final quarterBorderPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
+    
+    canvas.drawCircle(firstQuarterScreen, handleSize / 2, quarterPaint);
+    canvas.drawCircle(firstQuarterScreen, handleSize / 2, quarterBorderPaint);
+    
+    canvas.drawCircle(thirdQuarterScreen, handleSize / 2, quarterPaint);
+    canvas.drawCircle(thirdQuarterScreen, handleSize / 2, quarterBorderPaint);
   }
 
   void _drawGrid(Canvas canvas, Size size) {

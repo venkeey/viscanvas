@@ -14,6 +14,22 @@ class Connector extends CanvasObject {
   AnchorPoint? _sourceAnchor;
   AnchorPoint? _targetAnchor;
   bool showArrow;
+  
+  // Curvature parameters for editing
+  double curvatureScale = 1.0;
+  Offset? _midNormalOverride;
+  
+  // Cached control points for extrema calculation
+  Offset? _cachedCp1;
+  Offset? _cachedCp2;
+  
+  // Public methods to invalidate cache
+  void invalidatePathCache() {
+    _cachedPath = null;
+    _cachedCp1 = null;
+    _cachedCp2 = null;
+    invalidateCache();
+  }
 
   Connector({
     required super.id,
@@ -48,8 +64,49 @@ class Connector extends CanvasObject {
   void updatePoints() {
     _updateSmartAnchors();
     _cachedPath = null;
+    _cachedCp1 = null;
+    _cachedCp2 = null;
     invalidateCache();
   }
+  
+  // Handle positions for editing - split path into 4 equal parts
+  Offset get startHandle => sourcePoint;
+  Offset get endHandle => targetPoint;
+  
+  Offset get firstQuarterHandle => _getPathPointAt(0.25);
+  Offset get thirdQuarterHandle => _getPathPointAt(0.75);
+  
+  Offset _getPathPointAt(double t) {
+    // Sample the path at parameter t (0.0 to 1.0)
+    if (_cachedCp1 != null && _cachedCp2 != null) {
+      return _evaluateCubic(t);
+    }
+    
+    // Fallback: linear interpolation between source and target
+    return Offset.lerp(sourcePoint, targetPoint, t)!;
+  }
+  
+  Offset _evaluateCubic(double t) {
+    // Evaluate cubic bezier at parameter t
+    final p0 = sourcePoint;
+    final p1 = _cachedCp1!;
+    final p2 = _cachedCp2!;
+    final p3 = targetPoint;
+    
+    final u = 1.0 - t;
+    final tt = t * t;
+    final uu = u * u;
+    final uuu = uu * u;
+    final ttt = tt * t;
+    
+    return Offset(
+      uuu * p0.dx + 3 * uu * t * p1.dx + 3 * u * tt * p2.dx + ttt * p3.dx,
+      uuu * p0.dy + 3 * uu * t * p1.dy + 3 * u * tt * p2.dy + ttt * p3.dy,
+    );
+  }
+  
+  
+  
 
   Path get path {
     _cachedPath ??= _computePath();
@@ -59,12 +116,35 @@ class Connector extends CanvasObject {
   Path _computePath() {
     // Use smart curved path if we have anchors
     if (_sourceAnchor != null && _targetAnchor != null) {
-      return ConnectorCalculator.createSmartCurvedPath(_sourceAnchor!, _targetAnchor!);
+      final path = ConnectorCalculator.createSmartCurvedPath(_sourceAnchor!, _targetAnchor!);
+      _cacheControlPoints();
+      return path;
     }
     // Fallback to old method
     final startDir = ConnectorCalculator.estimateEdgeDirection(sourcePoint, sourceObject.getBoundingRect().center);
     final endDir = ConnectorCalculator.estimateEdgeDirection(targetPoint, targetObject.getBoundingRect().center);
-    return ConnectorCalculator.createCurvedPath(sourcePoint, targetPoint, startDir, endDir);
+    final path = ConnectorCalculator.createCurvedPath(sourcePoint, targetPoint, startDir, endDir);
+    _cacheControlPoints();
+    return path;
+  }
+  
+  void _cacheControlPoints() {
+    // Calculate control points for extrema calculation
+    final distance = (targetPoint - sourcePoint).distance;
+    final controlPointOffset = distance * 0.35 * curvatureScale;
+    
+    final dx = targetPoint.dx - sourcePoint.dx;
+    final dy = targetPoint.dy - sourcePoint.dy;
+    
+    _cachedCp1 = Offset(
+      sourcePoint.dx + (dx.abs() > dy.abs() ? (dx > 0 ? controlPointOffset : -controlPointOffset) : 0),
+      sourcePoint.dy + (dy.abs() > dx.abs() ? (dy > 0 ? controlPointOffset : -controlPointOffset) : 0),
+    );
+    
+    _cachedCp2 = Offset(
+      targetPoint.dx + (dx.abs() > dy.abs() ? (dx > 0 ? -controlPointOffset : controlPointOffset) : 0),
+      targetPoint.dy + (dy.abs() > dx.abs() ? (dy > 0 ? -controlPointOffset : controlPointOffset) : 0),
+    );
   }
 
   @override
@@ -125,7 +205,7 @@ class Connector extends CanvasObject {
 
   @override
   CanvasObject clone() {
-    return Connector(
+    final cloned = Connector(
       id: '${id}_copy',
       sourceObject: sourceObject,
       targetObject: targetObject,
@@ -135,6 +215,9 @@ class Connector extends CanvasObject {
       strokeWidth: strokeWidth,
       showArrow: showArrow,
     );
+    cloned.curvatureScale = curvatureScale;
+    cloned._midNormalOverride = _midNormalOverride;
+    return cloned;
   }
 }
 
