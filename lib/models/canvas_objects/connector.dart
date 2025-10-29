@@ -227,7 +227,25 @@ class Connector extends CanvasObject {
 
   @override
   bool hitTest(Offset worldPoint) {
-    return ConnectorCalculator.distanceToLine(worldPoint, sourcePoint, targetPoint) < 20.0; // Increased from 10 to 20 for easier selection
+    // Check distance to the actual curved path, not just a straight line
+    return _distanceToPath(worldPoint) < 20.0;
+  }
+  
+  double _distanceToPath(Offset worldPoint) {
+    // Sample points along the path and find minimum distance
+    double minDistance = double.infinity;
+    
+    // Sample the path at multiple points to find closest distance
+    for (int i = 0; i <= 50; i++) {
+      final t = i / 50.0;
+      final pointOnPath = _getPathPointAt(t);
+      final distance = (worldPoint - pointOnPath).distance;
+      if (distance < minDistance) {
+        minDistance = distance;
+      }
+    }
+    
+    return minDistance;
   }
 
   @override
