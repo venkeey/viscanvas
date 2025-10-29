@@ -100,6 +100,7 @@ class CanvasService extends ChangeNotifier {
   ConnectorAnalysis? get currentConnectorAnalysis => _connectorService.currentConnectorAnalysis;
   CanvasObject? get connectorHoverTarget => _connectorService.connectorHoverTarget;
   Offset? get lastWorldPoint => _toolsService.lastWorldPoint;
+  CanvasObject? get tempObject => _toolsService.tempObject;
 
   // Tool management
   void setTool(ToolType tool) {

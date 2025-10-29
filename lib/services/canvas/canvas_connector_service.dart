@@ -28,6 +28,17 @@ class CanvasConnectorService {
   );
 
   // ===== PUBLIC API =====
+  
+  // Update all connectors with current obstacles
+  void updateAllConnectors() {
+    final allObjects = _repository.getAll();
+    final connectors = allObjects.whereType<Connector>().toList();
+    
+    for (final connector in connectors) {
+      // Include all objects as obstacles (including source and target)
+      connector.updateObstacles(allObjects);
+    }
+  }
 
   CanvasObject? get connectorSourceObject => _connectorSourceObject;
   FreehandConnector? get currentFreehandConnector => _currentFreehandConnector;

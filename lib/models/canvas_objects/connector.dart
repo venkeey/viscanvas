@@ -27,12 +27,21 @@ class Connector extends CanvasObject {
   Offset? _cachedCp1;
   Offset? _cachedCp2;
   
+  // Obstacles to avoid when creating paths
+  List<CanvasObject> _obstacles = [];
+  
   // Public methods to invalidate cache
   void invalidatePathCache() {
     _cachedPath = null;
     _cachedCp1 = null;
     _cachedCp2 = null;
     invalidateCache();
+  }
+  
+  // Update obstacles and recalculate path
+  void updateObstacles(List<CanvasObject> obstacles) {
+    _obstacles = obstacles;
+    invalidatePathCache();
   }
 
   Connector({
@@ -45,9 +54,11 @@ class Connector extends CanvasObject {
     super.strokeWidth,
     super.isSelected,
     this.showArrow = true,
+    List<CanvasObject>? obstacles,
   }) : super(worldPosition: sourcePoint, fillColor: Colors.transparent) {
     // Calculate initial smart anchors
     _updateSmartAnchors();
+    _obstacles = obstacles ?? [];
   }
 
   void _updateSmartAnchors() {
@@ -209,7 +220,7 @@ class Connector extends CanvasObject {
     
     // Use smart curved path if we have anchors
     if (_sourceAnchor != null && _targetAnchor != null) {
-      final path = ConnectorCalculator.createSmartCurvedPath(_sourceAnchor!, _targetAnchor!);
+      final path = ConnectorCalculator.createSmartCurvedPath(_sourceAnchor!, _targetAnchor!, obstacles: _obstacles);
       _cacheControlPoints();
       return path;
     }

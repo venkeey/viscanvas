@@ -217,11 +217,17 @@ class ConnectorCalculator {
   }
 
   // New method for creating paths with AnchorPoints
-  static Path createSmartCurvedPath(AnchorPoint start, AnchorPoint end) {
+  static Path createSmartCurvedPath(AnchorPoint start, AnchorPoint end, {List<CanvasObject>? obstacles}) {
     final path = Path();
     path.moveTo(start.position.dx, start.position.dy);
 
     final distance = (end.position - start.position).distance;
+
+    // COLLISION INTELLIGENCE DISABLED - Using simple curved paths
+    // If obstacles are present, create intelligent curved path that avoids them
+    // if (obstacles != null && obstacles.isNotEmpty) {
+    //   return _createIntelligentCurvedPath(start, end, obstacles);
+    // }
 
     // Use S-curves for long connections, C-curves for short
     if (distance > 300) {
@@ -370,4 +376,410 @@ class ConnectorCalculator {
             (point.dy - lineStart.dy) * (lineEnd.dx - lineStart.dx))
             .abs() / normalLength;
   }
+
+  // COLLISION INTELLIGENCE DISABLED - Commented out intelligent curved path
+  // Create intelligent curved path that avoids obstacles while maintaining curves
+  // static Path _createIntelligentCurvedPath(AnchorPoint start, AnchorPoint end, List<CanvasObject> obstacles) {
+  //   final path = Path();
+  //   path.moveTo(start.position.dx, start.position.dy);
+
+  //   final distance = (end.position - start.position).distance;
+  //   final direction = (end.position - start.position).normalize();
+  //   final perpendicular = Offset(-direction.dy, direction.dx);
+
+  //   // Find obstacles in the direct path
+  //   final blockingObstacles = obstacles.where((obj) {
+  //     final bounds = obj.getBoundingRect();
+  //     return _lineIntersectsRect(start.position, end.position, bounds);
+  //   }).toList();
+
+  //   if (blockingObstacles.isEmpty) {
+  //     // No obstacles, use normal curved path
+  //     if (distance > 300) {
+  //       _createSCurve(path, start, end, distance);
+  //     } else {
+  //       _createCCurve(path, start, end, distance);
+  //     }
+  //     return path;
+  //   }
+
+  //   // Create intelligent S-curve that goes around obstacles
+  //   _createIntelligentSCurve(path, start, end, obstacles, distance, direction, perpendicular);
+
+  //   return path;
+  // }
+
+  // COLLISION INTELLIGENCE DISABLED - Commented out intelligent S-curve
+  // Create intelligent S-curve that avoids obstacles
+  // static void _createIntelligentSCurve(Path path, AnchorPoint start, AnchorPoint end, 
+  //     List<CanvasObject> obstacles, double distance, Offset direction, Offset perpendicular) {
+  //   // For S-curves, we create two segments with a mid-point
+  //   final midPoint = Offset.lerp(start.position, end.position, 0.5)!;
+  //   final controlPointOffset = distance * 0.35;
+
+  //   // Find control points that create collision-free path segments
+  //   final cp1 = _findSmartControlPointWithPathCheck(start, end, obstacles, controlPointOffset, true, perpendicular);
+  //   final cp2 = _findSmartControlPointForMidpointWithPathCheck(start, end, obstacles, controlPointOffset, midPoint, perpendicular, cp1, start.position);
+    
+  //   final cp3 = _findSmartControlPointForMidpointWithPathCheck(start, end, obstacles, controlPointOffset, midPoint, perpendicular, end.position, midPoint);
+  //   final cp4 = _findSmartControlPointWithPathCheck(start, end, obstacles, controlPointOffset, false, perpendicular);
+
+  //   // Create the S-curve with two cubic segments
+  //   path.cubicTo(cp1.dx, cp1.dy, cp2.dx, cp2.dy, midPoint.dx, midPoint.dy);
+  //   path.cubicTo(cp3.dx, cp3.dy, cp4.dx, cp4.dy, end.position.dx, end.position.dy);
+  // }
+
+  // COLLISION INTELLIGENCE DISABLED - Commented out smart control point methods
+  // Find smart control point for midpoint in S-curve
+  // static Offset _findSmartControlPointForMidpoint(AnchorPoint start, AnchorPoint end, 
+  //     List<CanvasObject> obstacles, double offset, Offset midPoint, Offset perpendicular) {
+    
+  //   final direction = (end.position - start.position).normalize();
+  //   final positions = <Offset>[];
+    
+  //   // Add direct midpoint
+  //   positions.add(midPoint);
+    
+  //   // Try positions at different distances and angles around midpoint
+  //   for (double distanceFactor = 0.3; distanceFactor <= 2.0; distanceFactor += 0.2) {
+  //     final currentOffset = offset * distanceFactor;
+      
+  //     // Try perpendicular offsets
+  //     for (double perpFactor = 0.1; perpFactor <= 2.0; perpFactor += 0.2) {
+  //       positions.add(midPoint + (perpendicular * currentOffset * perpFactor));
+  //       positions.add(midPoint - (perpendicular * currentOffset * perpFactor));
+  //     }
+      
+  //     // Try diagonal offsets
+  //     final diagonal1 = Offset(perpendicular.dx + direction.dx, perpendicular.dy + direction.dy).normalize();
+  //     final diagonal2 = Offset(perpendicular.dx - direction.dx, perpendicular.dy - direction.dy).normalize();
+      
+  //     for (double diagFactor = 0.2; diagFactor <= 1.5; diagFactor += 0.2) {
+  //       positions.add(midPoint + (diagonal1 * currentOffset * diagFactor));
+  //       positions.add(midPoint + (diagonal2 * currentOffset * diagFactor));
+  //       positions.add(midPoint - (diagonal1 * currentOffset * diagFactor));
+  //       positions.add(midPoint - (diagonal2 * currentOffset * diagFactor));
+  //     }
+  //   }
+
+  //   // Find the best position that avoids obstacles and is furthest from them
+  //   Offset bestPos = midPoint;
+  //   double bestScore = 0.0;
+    
+  //   for (final pos in positions) {
+  //     if (!_pointCollidesWithObjects(pos, obstacles, startPoint: start.position, endPoint: end.position)) {
+  //       // Calculate score based on distance from obstacles
+  //       double minDistance = double.infinity;
+  //       for (final obstacle in obstacles) {
+  //         final bounds = obstacle.getBoundingRect();
+  //         final distance = _distanceToRect(pos, bounds);
+  //         if (distance < minDistance) {
+  //           minDistance = distance;
+  //         }
+  //       }
+        
+  //       // Prefer positions that are further from obstacles
+  //       if (minDistance > bestScore) {
+  //         bestScore = minDistance;
+  //         bestPos = pos;
+  //       }
+  //     }
+  //   }
+
+  //   return bestPos;
+  // }
+
+  // COLLISION INTELLIGENCE DISABLED - Commented out all remaining collision detection methods
+  // Find smart control points that avoid obstacles while maintaining curves
+  // static Offset _findSmartControlPoint(AnchorPoint start, AnchorPoint end, List<CanvasObject> obstacles, 
+  //     double offset, bool isFirst, Offset perpendicular) {
+  // final direction = (end.position - start.position).normalize();
+    
+  // // Base control point position
+  // Offset basePos = isFirst 
+  //     ? start.position + (direction * offset)
+  //     : end.position - (direction * offset);
+    
+  // // Try many more positions to find a clear path
+  // final positions = <Offset>[];
+    
+  // // Add base position
+  // positions.add(basePos);
+    
+  // // Try positions at different distances and angles
+  // for (double distanceFactor = 0.5; distanceFactor <= 2.0; distanceFactor += 0.2) {
+  //   final currentOffset = offset * distanceFactor;
+  //   final currentPos = isFirst 
+  //       ? start.position + (direction * currentOffset)
+  //       : end.position - (direction * currentOffset);
+      
+  //   // Try perpendicular offsets
+  //   for (double perpFactor = 0.0; perpFactor <= 2.0; perpFactor += 0.2) {
+  //     positions.add(currentPos + (perpendicular * currentOffset * perpFactor));
+  //     positions.add(currentPos - (perpendicular * currentOffset * perpFactor));
+  //   }
+      
+  //   // Try diagonal offsets
+  //   final diagonal1 = Offset(perpendicular.dx + direction.dx, perpendicular.dy + direction.dy).normalize();
+  //   final diagonal2 = Offset(perpendicular.dx - direction.dx, perpendicular.dy - direction.dy).normalize();
+      
+  //   for (double diagFactor = 0.2; diagFactor <= 1.5; diagFactor += 0.2) {
+  //     positions.add(currentPos + (diagonal1 * currentOffset * diagFactor));
+  //     positions.add(currentPos + (diagonal2 * currentOffset * diagFactor));
+  //     positions.add(currentPos - (diagonal1 * currentOffset * diagFactor));
+  //     positions.add(currentPos - (diagonal2 * currentOffset * diagFactor));
+  //   }
+  // }
+
+  // // Find the best position that avoids obstacles and is furthest from them
+  // Offset bestPos = basePos;
+  // double bestScore = 0.0;
+    
+  // for (final pos in positions) {
+  //   if (!_pointCollidesWithObjects(pos, obstacles, startPoint: start.position, endPoint: end.position)) {
+  //     // Calculate score based on distance from obstacles
+  //     double minDistance = double.infinity;
+  //     for (final obstacle in obstacles) {
+  //       final bounds = obstacle.getBoundingRect();
+  //       final distance = _distanceToRect(pos, bounds);
+  //       if (distance < minDistance) {
+  //         minDistance = distance;
+  //       }
+  //     }
+        
+  //     // Prefer positions that are further from obstacles
+  //     if (minDistance > bestScore) {
+  //       bestScore = minDistance;
+  //       bestPos = pos;
+  //     }
+  //   }
+  // }
+
+  // return bestPos;
+  // }
+
+  // // Calculate distance from a point to a rectangle
+  // static double _distanceToRect(Offset point, Rect rect) {
+  //   final dx = max(0.0, max(rect.left - point.dx, point.dx - rect.right));
+  //   final dy = max(0.0, max(rect.top - point.dy, point.dy - rect.bottom));
+  //   return sqrt(dx * dx + dy * dy);
+  // }
+
+  // // Find smart control point with path segment collision checking
+  // static Offset _findSmartControlPointWithPathCheck(AnchorPoint start, AnchorPoint end, List<CanvasObject> obstacles, 
+  //     double offset, bool isFirst, Offset perpendicular) {
+  //   final direction = (end.position - start.position).normalize();
+    
+  //   // Base control point position
+  //   Offset basePos = isFirst 
+  //       ? start.position + (direction * offset)
+  //       : end.position - (direction * offset);
+    
+  //   // Try many positions to find a clear path
+  //   final positions = <Offset>[];
+    
+  //   // Add base position
+  //   positions.add(basePos);
+    
+  //   // Try positions at different distances and angles
+  //   for (double distanceFactor = 0.5; distanceFactor <= 2.0; distanceFactor += 0.2) {
+  //     final currentOffset = offset * distanceFactor;
+  //     final currentPos = isFirst 
+  //         ? start.position + (direction * currentOffset)
+  //         : end.position - (direction * currentOffset);
+      
+  //     // Try perpendicular offsets
+  //     for (double perpFactor = 0.0; perpFactor <= 2.0; perpFactor += 0.2) {
+  //       positions.add(currentPos + (perpendicular * currentOffset * perpFactor));
+  //       positions.add(currentPos - (perpendicular * currentOffset * perpFactor));
+  //     }
+      
+  //     // Try diagonal offsets
+  //     final diagonal1 = Offset(perpendicular.dx + direction.dx, perpendicular.dy + direction.dy).normalize();
+  //     final diagonal2 = Offset(perpendicular.dx - direction.dx, perpendicular.dy - direction.dy).normalize();
+      
+  //     for (double diagFactor = 0.2; diagFactor <= 1.5; diagFactor += 0.2) {
+  //       positions.add(currentPos + (diagonal1 * currentOffset * diagFactor));
+  //       positions.add(currentPos + (diagonal2 * currentOffset * diagFactor));
+  //       positions.add(currentPos - (diagonal1 * currentOffset * diagFactor));
+  //       positions.add(currentPos - (diagonal2 * currentOffset * diagFactor));
+  //     }
+  //   }
+
+  //   // Find the best position that avoids obstacles and creates collision-free path
+  //   Offset bestPos = basePos;
+  //   double bestScore = 0.0;
+    
+  //   for (final pos in positions) {
+  //     if (!_pointCollidesWithObjects(pos, obstacles, startPoint: start.position, endPoint: end.position)) {
+  //       // Check if the path segment from start to this control point is collision-free
+  //       if (isFirst) {
+  //         if (!_cubicSegmentCollidesWithObjects(start.position, pos, obstacles)) {
+  //           double minDistance = _getMinDistanceFromObstacles(pos, obstacles);
+  //           if (minDistance > bestScore) {
+  //             bestScore = minDistance;
+  //             bestPos = pos;
+  //           }
+  //         }
+  //       } else {
+  //         if (!_cubicSegmentCollidesWithObjects(pos, end.position, obstacles)) {
+  //           double minDistance = _getMinDistanceFromObstacles(pos, obstacles);
+  //           if (minDistance > bestScore) {
+  //             bestScore = minDistance;
+  //             bestPos = pos;
+  //           }
+  //         }
+  //       }
+  //     }
+  //   }
+
+  //   return bestPos;
+  // }
+
+  // // Find smart control point for midpoint with path segment collision checking
+  // static Offset _findSmartControlPointForMidpointWithPathCheck(AnchorPoint start, AnchorPoint end, 
+  //     List<CanvasObject> obstacles, double offset, Offset midPoint, Offset perpendicular, 
+  //     Offset otherCp, Offset segmentStart) {
+    
+  //   final direction = (end.position - start.position).normalize();
+  //   final positions = <Offset>[];
+    
+  //   // Add direct midpoint
+  //   positions.add(midPoint);
+    
+  //   // Try positions at different distances and angles around midpoint
+  //   for (double distanceFactor = 0.3; distanceFactor <= 2.0; distanceFactor += 0.2) {
+  //     final currentOffset = offset * distanceFactor;
+      
+  //     // Try perpendicular offsets
+  //     for (double perpFactor = 0.1; perpFactor <= 2.0; perpFactor += 0.2) {
+  //       positions.add(midPoint + (perpendicular * currentOffset * perpFactor));
+  //       positions.add(midPoint - (perpendicular * currentOffset * perpFactor));
+  //     }
+      
+  //     // Try diagonal offsets
+  //     final diagonal1 = Offset(perpendicular.dx + direction.dx, perpendicular.dy + direction.dy).normalize();
+  //     final diagonal2 = Offset(perpendicular.dx - direction.dx, perpendicular.dy - direction.dy).normalize();
+      
+  //     for (double diagFactor = 0.2; diagFactor <= 1.5; diagFactor += 0.2) {
+  //       positions.add(midPoint + (diagonal1 * currentOffset * diagFactor));
+  //       positions.add(midPoint + (diagonal2 * currentOffset * diagFactor));
+  //       positions.add(midPoint - (diagonal1 * currentOffset * diagFactor));
+  //       positions.add(midPoint - (diagonal2 * currentOffset * diagFactor));
+  //     }
+  //   }
+
+  //   // Find the best position that avoids obstacles and creates collision-free path segment
+  //   Offset bestPos = midPoint;
+  //   double bestScore = 0.0;
+    
+  //   for (final pos in positions) {
+  //     if (!_pointCollidesWithObjects(pos, obstacles, startPoint: start.position, endPoint: end.position)) {
+  //       // Check if the cubic segment from segmentStart through this control point to otherCp is collision-free
+  //       if (!_cubicSegmentCollidesWithObjects(segmentStart, pos, obstacles) && 
+  //           !_cubicSegmentCollidesWithObjects(pos, otherCp, obstacles)) {
+  //         double minDistance = _getMinDistanceFromObstacles(pos, obstacles);
+  //         if (minDistance > bestScore) {
+  //           bestScore = minDistance;
+  //           bestPos = pos;
+  //         }
+  //       }
+  //     }
+  //   }
+
+  //   return bestPos;
+  // }
+
+  // // Check if a cubic segment collides with obstacles
+  // static bool _cubicSegmentCollidesWithObjects(Offset start, Offset end, List<CanvasObject> obstacles) {
+  //   // Sample points along a straight line between start and end
+  //   for (int i = 0; i <= 20; i++) {
+  //     final t = i / 20.0;
+  //     final point = Offset.lerp(start, end, t)!;
+  //     if (_pointCollidesWithObjects(point, obstacles)) {
+  //       return true;
+  //     }
+  //   }
+  //   return false;
+  // }
+
+  // // Get minimum distance from a point to all obstacles
+  // static double _getMinDistanceFromObstacles(Offset point, List<CanvasObject> obstacles) {
+  //   double minDistance = double.infinity;
+  //   for (final obstacle in obstacles) {
+  //     final bounds = obstacle.getBoundingRect();
+  //     final distance = _distanceToRect(point, bounds);
+  //     if (distance < minDistance) {
+  //       minDistance = distance;
+  //     }
+  //   }
+  //   return minDistance;
+  // }
+
+  // // Check if a line intersects with a rectangle
+  // static bool _lineIntersectsRect(Offset start, Offset end, Rect rect) {
+  //   // Check if any of the line endpoints are inside the rectangle
+  //   if (rect.contains(start) || rect.contains(end)) return true;
+
+  //   // Check if the line intersects any of the rectangle's edges
+  //   final edges = [
+  //     [rect.topLeft, rect.topRight],
+  //     [rect.topRight, rect.bottomRight],
+  //     [rect.bottomRight, rect.bottomLeft],
+  //     [rect.bottomLeft, rect.topLeft],
+  //   ];
+
+  //   for (final edge in edges) {
+  //     if (_linesIntersect(start, end, edge[0], edge[1])) {
+  //       return true;
+  //     }
+  //   }
+
+  //   return false;
+  // }
+
+  // // Check if two lines intersect
+  // static bool _linesIntersect(Offset p1, Offset q1, Offset p2, Offset q2) {
+  //   final o1 = _orientation(p1, q1, p2);
+  //   final o2 = _orientation(p1, q1, q2);
+  //   final o3 = _orientation(p2, q2, p1);
+  //   final o4 = _orientation(p2, q2, q1);
+
+  //   return (o1 != o2 && o3 != o4) || 
+  //          (o1 == 0 && _onSegment(p1, p2, q1)) ||
+  //          (o2 == 0 && _onSegment(p1, q2, q1)) ||
+  //          (o3 == 0 && _onSegment(p2, p1, q2)) ||
+  //          (o4 == 0 && _onSegment(p2, q1, q2));
+  // }
+
+  // // Helper for line intersection
+  // static int _orientation(Offset p, Offset q, Offset r) {
+  //   final val = (q.dy - p.dy) * (r.dx - q.dx) - (q.dx - p.dx) * (r.dy - q.dy);
+  //   if (val == 0) return 0;
+  //   return val > 0 ? 1 : 2;
+  // }
+
+  // // Helper for line intersection
+  // static bool _onSegment(Offset p, Offset q, Offset r) {
+  //   return q.dx <= max(p.dx, r.dx) && q.dx >= min(p.dx, r.dx) &&
+  //          q.dy <= max(p.dy, r.dy) && q.dy >= min(p.dy, r.dy);
+  // }
+
+  // // Check if a point collides with any objects (excluding connection points)
+  // static bool _pointCollidesWithObjects(Offset point, List<CanvasObject> obstacles, {Offset? startPoint, Offset? endPoint}) {
+  //   for (final obstacle in obstacles) {
+  //     final bounds = obstacle.getBoundingRect();
+  //     if (bounds.contains(point)) {
+  //       // Allow the point if it's very close to the start or end connection points
+  //       if (startPoint != null && (point - startPoint).distance < 5.0) {
+  //         continue;
+  //       }
+  //       if (endPoint != null && (point - endPoint).distance < 5.0) {
+  //         continue;
+  //       }
+  //       return true;
+  //     }
+  //   }
+  //   return false;
+  // }
 }

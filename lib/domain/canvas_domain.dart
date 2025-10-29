@@ -332,6 +332,9 @@ class CommandHistory {
   final List<Command> _undoStack = [];
   final List<Command> _redoStack = [];
   final int maxHistorySize;
+  
+  // Callback for when objects change
+  void Function()? onObjectsChanged;
 
   CommandHistory({this.maxHistorySize = 100});
 
@@ -342,6 +345,7 @@ class CommandHistory {
     if (_undoStack.length > maxHistorySize) {
       _undoStack.removeAt(0);
     }
+    onObjectsChanged?.call();
   }
 
   bool canUndo() => _undoStack.isNotEmpty;
@@ -352,6 +356,7 @@ class CommandHistory {
     final command = _undoStack.removeLast();
     command.undo();
     _redoStack.add(command);
+    onObjectsChanged?.call();
   }
 
   void redo() {
@@ -359,6 +364,7 @@ class CommandHistory {
     final command = _redoStack.removeLast();
     command.execute();
     _undoStack.add(command);
+    onObjectsChanged?.call();
   }
 
   void clear() {

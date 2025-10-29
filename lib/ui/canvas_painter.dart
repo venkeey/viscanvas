@@ -28,6 +28,11 @@ class AdvancedCanvasPainter extends CustomPainter {
       obj.draw(canvas, service.transform.matrix);
     }
 
+    // Draw temporary object during creation
+    if (service.tempObject != null) {
+      service.tempObject!.draw(canvas, service.transform.matrix);
+    }
+
     // Draw ghost line preview during drag connection
     if (service.connectorSourceObject != null && service.lastWorldPoint != null) {
       _drawGhostLine(canvas, service.connectorSourceObject!, service.lastWorldPoint!);

@@ -52,6 +52,7 @@ class CanvasToolsService {
   // ===== PUBLIC API =====
 
   Offset? get lastWorldPoint => _lastWorldPoint;
+  CanvasObject? get tempObject => _tempObject;
 
   void onPanStart(Offset screenPoint, ToolType currentTool, Transform2D transform, Color strokeColor, Color fillColor, double strokeWidth) {
     final worldPoint = transform.screenToWorld(screenPoint);
@@ -103,11 +104,8 @@ class CanvasToolsService {
     } else if (currentTool != ToolType.pan) {
       _tempObject = _createObject(worldPoint, currentTool, strokeColor, fillColor, strokeWidth);
       if (_tempObject != null) {
-        _commandHistory.execute(CreateObjectCommand(_repository, _tempObject!));
-        // After creating an object, switch back to select mode so user can immediately interact with it
-        CanvasLogger.canvasService('Created ${_tempObject!.runtimeType}(${_tempObject!.id}); switching tool to select');
-        onToolChanged?.call(ToolType.select);
-        onObjectCreated?.call();
+        // Don't add to repository yet - wait until onPanEnd for real-time sizing
+        CanvasLogger.canvasService('Started drawing ${_tempObject!.runtimeType}(${_tempObject!.id})');
       } else {
         Logger.warning('Failed to create object for tool=$currentTool', 'CanvasService');
       }
@@ -189,6 +187,15 @@ class CanvasToolsService {
         }
       }
       _preMoveState = null;
+    }
+
+    // Commit temporary object to repository if it exists
+    if (_tempObject != null) {
+      _commandHistory.execute(CreateObjectCommand(_repository, _tempObject!));
+      // After creating an object, switch back to select mode so user can immediately interact with it
+      CanvasLogger.canvasService('Created ${_tempObject!.runtimeType}(${_tempObject!.id}); switching tool to select');
+      onToolChanged?.call(ToolType.select);
+      onObjectCreated?.call();
     }
 
     _tempObject = null;
