@@ -19,6 +19,10 @@ class Connector extends CanvasObject {
   double curvatureScale = 1.0;
   Offset? _midNormalOverride;
   
+  // Direct control points for curve manipulation
+  Offset? _cp1;
+  Offset? _cp2;
+  
   // Cached control points for extrema calculation
   Offset? _cachedCp1;
   Offset? _cachedCp2;
@@ -69,6 +73,60 @@ class Connector extends CanvasObject {
     invalidateCache();
   }
   
+  void initializeControlPoints() {
+    // Initialize control points from the current path if not already set
+    if (_cp1 == null || _cp2 == null) {
+      _cacheControlPoints();
+      _cp1 = _cachedCp1;
+      _cp2 = _cachedCp2;
+    }
+  }
+  
+  void updateControlPoint1(Offset newPosition) {
+    _cp1 = newPosition;
+    _cachedPath = null;
+    invalidateCache();
+  }
+  
+  void updateControlPoint2(Offset newPosition) {
+    _cp2 = newPosition;
+    _cachedPath = null;
+    invalidateCache();
+  }
+  
+  void updateCurveThroughPoint(double t, Offset pointOnCurve) {
+    // Solve for control points that make the curve pass through pointOnCurve at parameter t
+    initializeControlPoints();
+    
+    if (t == 0.25) {
+      // Solve for cp1: P(0.25) = pointOnCurve
+      // P(0.25) = 0.421875*P0 + 0.421875*P1 + 0.140625*P2 + 0.015625*P3
+      // 0.421875*P1 = pointOnCurve - 0.421875*P0 - 0.140625*P2 - 0.015625*P3
+      final p0 = sourcePoint;
+      final p2 = _cp2 ?? _cachedCp2!;
+      final p3 = targetPoint;
+      
+      final cp1New = Offset(
+        (pointOnCurve.dx - 0.421875 * p0.dx - 0.140625 * p2.dx - 0.015625 * p3.dx) / 0.421875,
+        (pointOnCurve.dy - 0.421875 * p0.dy - 0.140625 * p2.dy - 0.015625 * p3.dy) / 0.421875,
+      );
+      updateControlPoint1(cp1New);
+    } else if (t == 0.75) {
+      // Solve for cp2: P(0.75) = pointOnCurve
+      // P(0.75) = 0.015625*P0 + 0.140625*P1 + 0.421875*P2 + 0.421875*P3
+      // 0.421875*P2 = pointOnCurve - 0.015625*P0 - 0.140625*P1 - 0.421875*P3
+      final p0 = sourcePoint;
+      final p1 = _cp1 ?? _cachedCp1!;
+      final p3 = targetPoint;
+      
+      final cp2New = Offset(
+        (pointOnCurve.dx - 0.015625 * p0.dx - 0.140625 * p1.dx - 0.421875 * p3.dx) / 0.421875,
+        (pointOnCurve.dy - 0.015625 * p0.dy - 0.140625 * p1.dy - 0.421875 * p3.dy) / 0.421875,
+      );
+      updateControlPoint2(cp2New);
+    }
+  }
+  
   // Handle positions for editing - split path into 4 equal parts
   Offset get startHandle => sourcePoint;
   Offset get endHandle => targetPoint;
@@ -78,7 +136,9 @@ class Connector extends CanvasObject {
   
   Offset _getPathPointAt(double t) {
     // Sample the path at parameter t (0.0 to 1.0)
-    if (_cachedCp1 != null && _cachedCp2 != null) {
+    if (_cp1 != null && _cp2 != null) {
+      return _evaluateCubicWithPoints(t, sourcePoint, _cp1!, _cp2!, targetPoint);
+    } else if (_cachedCp1 != null && _cachedCp2 != null) {
       return _evaluateCubic(t);
     }
     
@@ -93,6 +153,11 @@ class Connector extends CanvasObject {
     final p2 = _cachedCp2!;
     final p3 = targetPoint;
     
+    return _evaluateCubicWithPoints(t, p0, p1, p2, p3);
+  }
+  
+  Offset _evaluateCubicWithPoints(double t, Offset p0, Offset p1, Offset p2, Offset p3) {
+    // Evaluate cubic bezier at parameter t with given control points
     final u = 1.0 - t;
     final tt = t * t;
     final uu = u * u;
@@ -114,6 +179,14 @@ class Connector extends CanvasObject {
   }
 
   Path _computePath() {
+    // If we have direct control points, use them
+    if (_cp1 != null && _cp2 != null) {
+      final path = Path();
+      path.moveTo(sourcePoint.dx, sourcePoint.dy);
+      path.cubicTo(_cp1!.dx, _cp1!.dy, _cp2!.dx, _cp2!.dy, targetPoint.dx, targetPoint.dy);
+      return path;
+    }
+    
     // Use smart curved path if we have anchors
     if (_sourceAnchor != null && _targetAnchor != null) {
       final path = ConnectorCalculator.createSmartCurvedPath(_sourceAnchor!, _targetAnchor!);
@@ -217,6 +290,8 @@ class Connector extends CanvasObject {
     );
     cloned.curvatureScale = curvatureScale;
     cloned._midNormalOverride = _midNormalOverride;
+    cloned._cp1 = _cp1;
+    cloned._cp2 = _cp2;
     return cloned;
   }
 }

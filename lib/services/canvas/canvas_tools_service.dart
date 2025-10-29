@@ -504,19 +504,17 @@ class CanvasToolsService {
         
       case ResizeHandle.connectorFirstQuarter:
       case ResizeHandle.connectorThirdQuarter:
-        // Adjust curvature based on vertical drag
-        final currentQuarter = handle == ResizeHandle.connectorFirstQuarter 
-            ? connector.firstQuarterHandle 
-            : connector.thirdQuarterHandle;
-        final deltaY = worldPoint.dy - currentQuarter.dy;
+        // Initialize control points if not already set
+        connector.initializeControlPoints();
         
-        // Adjust curvature scale based on vertical movement
-        // Both quarter handles adjust curvature in the same direction
-        final curvatureDelta = deltaY * 0.01;
-        connector.curvatureScale = (connector.curvatureScale + curvatureDelta).clamp(0.1, 3.0);
-        
-        // Invalidate cached path and control points
-        connector.invalidatePathCache();
+        // Update curve to pass through the dragged position
+        if (handle == ResizeHandle.connectorFirstQuarter) {
+          // First quarter handle at t=0.25
+          connector.updateCurveThroughPoint(0.25, worldPoint);
+        } else {
+          // Third quarter handle at t=0.75
+          connector.updateCurveThroughPoint(0.75, worldPoint);
+        }
         break;
         
       default:
