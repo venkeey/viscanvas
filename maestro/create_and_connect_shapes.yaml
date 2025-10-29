@@ -1,0 +1,78 @@
+# Maestro Flow - Perfect for No-Code Platform Video Testing
+# Maestro automatically records video and screenshots of this flow
+# Users can watch the video to verify functionality
+
+appId: com.example.viscanvas
+---
+
+# Test: Create and Connect Two Shapes
+- launchApp:
+    appId: com.example.viscanvas
+
+- tapOn:
+    text: "Canvas"
+
+# Take screenshot for documentation
+- screenshot: "01-app-launched"
+
+# Wait for app to load
+- waitForAnimationToEnd
+
+# Step 1: Select Rectangle Tool
+- tapOn:
+    id: "rectangle_button"  # You'll need to add testKey to your buttons
+
+- screenshot: "02-rectangle-tool-selected"
+
+- waitForAnimationToEnd
+
+# Step 2: Draw First Rectangle
+- tapOn:
+    point: "25%,30%"  # Tap at 25% width, 30% height
+
+- swipe:
+    start: "25%,30%"
+    end: "40%,45%"
+    duration: 1000
+
+- screenshot: "03-first-rectangle-created"
+
+- waitForAnimationToEnd:
+    timeout: 2000
+
+# Step 3: Draw Second Rectangle
+- swipe:
+    start: "60%,30%"
+    end: "75%,45%"
+    duration: 1000
+
+- screenshot: "04-second-rectangle-created"
+
+- waitForAnimationToEnd:
+    timeout: 2000
+
+# Step 4: Select Connector Tool
+- tapOn:
+    id: "connector_button"
+
+- screenshot: "05-connector-tool-selected"
+
+- waitForAnimationToEnd
+
+# Step 5: Draw Connection
+- swipe:
+    start: "32.5%,37.5%"  # Center of first rectangle
+    end: "67.5%,37.5%"    # Center of second rectangle
+    duration: 1000
+
+- screenshot: "06-connection-created"
+
+- waitForAnimationToEnd:
+    timeout: 2000
+
+# Final verification screenshot
+- screenshot: "07-final-result"
+
+# Success!
+- assertTrue:
+    visible: "Canvas"
