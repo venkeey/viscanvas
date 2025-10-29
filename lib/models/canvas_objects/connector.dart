@@ -73,6 +73,26 @@ class Connector extends CanvasObject {
     invalidateCache();
   }
   
+  void updateSourcePoint(Offset newPoint) {
+    // Create anchor from the manually set point
+    _sourceAnchor = ConnectorCalculator.createAnchorFromPoint(sourceObject, newPoint);
+    sourcePoint = newPoint;
+    _cachedPath = null;
+    _cachedCp1 = null;
+    _cachedCp2 = null;
+    invalidateCache();
+  }
+  
+  void updateTargetPoint(Offset newPoint) {
+    // Create anchor from the manually set point
+    _targetAnchor = ConnectorCalculator.createAnchorFromPoint(targetObject, newPoint);
+    targetPoint = newPoint;
+    _cachedPath = null;
+    _cachedCp1 = null;
+    _cachedCp2 = null;
+    invalidateCache();
+  }
+  
   void initializeControlPoints() {
     // Initialize control points from the current path if not already set
     if (_cp1 == null || _cp2 == null) {

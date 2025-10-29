@@ -491,15 +491,13 @@ class CanvasToolsService {
       case ResizeHandle.connectorStart:
         // Snap to nearest edge of source object
         final newSourcePoint = ConnectorCalculator.getClosestEdgePoint(connector.sourceObject, worldPoint);
-        connector.sourcePoint = newSourcePoint;
-        connector.updatePoints();
+        connector.updateSourcePoint(newSourcePoint);
         break;
         
       case ResizeHandle.connectorEnd:
         // Snap to nearest edge of target object
         final newTargetPoint = ConnectorCalculator.getClosestEdgePoint(connector.targetObject, worldPoint);
-        connector.targetPoint = newTargetPoint;
-        connector.updatePoints();
+        connector.updateTargetPoint(newTargetPoint);
         break;
         
       case ResizeHandle.connectorFirstQuarter:

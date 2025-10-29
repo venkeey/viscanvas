@@ -301,6 +301,55 @@ class ConnectorCalculator {
       }
     }
   }
+  
+  // Create an anchor point from a specific position on an object
+  static AnchorPoint createAnchorFromPoint(CanvasObject object, Offset point) {
+    final bounds = object.getBoundingRect();
+    final center = bounds.center;
+    final dx = point.dx - center.dx;
+    final dy = point.dy - center.dy;
+    
+    NodeEdge edge;
+    double edgePosition = 0.5; // Default to center
+    
+    if (object is CanvasCircle) {
+      // For circles, determine edge based on angle
+      final angle = atan2(dy, dx);
+      // Normalize angle to 0-2π
+      final normalizedAngle = angle < 0 ? angle + 2 * pi : angle;
+      
+      if (normalizedAngle >= pi / 4 && normalizedAngle < 3 * pi / 4) {
+        edge = NodeEdge.bottom;
+      } else if (normalizedAngle >= 3 * pi / 4 && normalizedAngle < 5 * pi / 4) {
+        edge = NodeEdge.left;
+      } else if (normalizedAngle >= 5 * pi / 4 && normalizedAngle < 7 * pi / 4) {
+        edge = NodeEdge.top;
+      } else {
+        edge = NodeEdge.right;
+      }
+    } else {
+      // For rectangles, determine which edge
+      if (dx.abs() > dy.abs()) {
+        edge = dx > 0 ? NodeEdge.right : NodeEdge.left;
+        // Calculate position along the edge (0.0 to 1.0)
+        final edgeLength = bounds.height;
+        final distanceFromTop = point.dy - bounds.top;
+        edgePosition = edgeLength > 0 ? (distanceFromTop / edgeLength).clamp(0.0, 1.0) : 0.5;
+      } else {
+        edge = dy > 0 ? NodeEdge.bottom : NodeEdge.top;
+        // Calculate position along the edge (0.0 to 1.0)
+        final edgeLength = bounds.width;
+        final distanceFromLeft = point.dx - bounds.left;
+        edgePosition = edgeLength > 0 ? (distanceFromLeft / edgeLength).clamp(0.0, 1.0) : 0.5;
+      }
+    }
+    
+    return AnchorPoint(
+      position: point,
+      edge: edge,
+      edgePosition: edgePosition,
+    );
+  }
 
   static String estimateEdgeDirection(Offset point, Offset center) {
     final dx = point.dx - center.dx;
