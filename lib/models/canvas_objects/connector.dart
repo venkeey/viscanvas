@@ -74,7 +74,7 @@ class Connector extends CanvasObject {
 
   @override
   bool hitTest(Offset worldPoint) {
-    return ConnectorCalculator.distanceToLine(worldPoint, sourcePoint, targetPoint) < 10.0;
+    return ConnectorCalculator.distanceToLine(worldPoint, sourcePoint, targetPoint) < 20.0; // Increased from 10 to 20 for easier selection
   }
 
   @override

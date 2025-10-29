@@ -43,7 +43,7 @@ class FreehandPath extends CanvasObject {
 
   @override
   bool hitTest(Offset worldPoint) {
-    final pathBounds = _path.shift(worldPosition).getBounds().inflate(strokeWidth / 2);
+    final pathBounds = _path.shift(worldPosition).getBounds().inflate(strokeWidth / 2 + 16); // Added 16px for easier selection
     return pathBounds.contains(worldPoint);
   }
 

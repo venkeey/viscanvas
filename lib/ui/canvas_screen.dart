@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../services/canvas_service.dart';
+import '../services/canvas/canvas_service.dart';
 import '../widgets/miro_sidebar.dart';
 import '../widgets/shapes_panel.dart';
 import '../models/canvas_objects/sticky_note.dart';
@@ -344,7 +344,7 @@ class _CanvasScreenState extends State<CanvasScreen> {
         await _service.saveCanvasToFile(fileName: 'canvas_$timestamp');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Canvas saved successfully!')),
+            SnackBar(content: Text('Canvas saved successfully!')),
           );
         }
       } catch (e) {
@@ -391,22 +391,26 @@ class _CanvasScreenState extends State<CanvasScreen> {
                       // Main Canvas
                       Positioned.fill(
                         child: GestureDetector(
-                          onScaleStart: (details) => _service.onPanStart(details.localFocalPoint),
+                          onTapDown: (details) {
+                            _service.onTap(details.localPosition);
+                            _handleCanvasTap();
+                          },
+                          onScaleStart: (details) {
+                            _service.onPanStart(details.localFocalPoint);
+                          },
                           onScaleUpdate: (details) {
                             if (details.scale != 1.0) {
+                              // Handle zoom/scale gestures
                               _service.updateTransform(
                                 _service.transform.translation,
                                 _service.transform.scale * details.scale,
                               );
                             } else {
+                              // Handle pan gestures (when scale is 1.0)
                               _service.onPanUpdate(details.localFocalPoint, details.focalPointDelta);
                             }
                           },
                           onScaleEnd: (details) => _service.onPanEnd(),
-                          onTapDown: (details) {
-                            _service.onTap(details.localPosition);
-                            _handleCanvasTap();
-                          },
                           child: CustomPaint(
                             painter: AdvancedCanvasPainter(_service),
                             size: Size.infinite,

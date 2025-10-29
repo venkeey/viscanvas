@@ -2,7 +2,7 @@ import 'dart:math';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
-import '../services/canvas_service.dart';
+import '../services/canvas/canvas_service.dart';
 import '../domain/canvas_domain.dart';
 import '../pages/drawing_persistence_service.dart';
 import '../models/canvas_objects/sticky_note.dart';

@@ -10,7 +10,7 @@ import '../models/canvas_objects/canvas_rectangle.dart';
 import '../models/canvas_objects/canvas_circle.dart';
 import '../models/canvas_objects/sticky_note.dart';
 import '../domain/canvas_domain.dart';
-import '../services/canvas_service.dart';
+import '../services/canvas/canvas_service.dart';
 import 'drawingCanvas.dart';
 
 // ===== SERIALIZATION EXTENSIONS =====
@@ -583,7 +583,7 @@ class SaveLoadUI extends StatelessWidget {
 
       if (files.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No saved canvases found')),
+          SnackBar(content: Text('No saved canvases found')),
         );
         return;
       }
@@ -598,12 +598,18 @@ class SaveLoadUI extends StatelessWidget {
             child: ListView.builder(
               itemCount: files.length,
               itemBuilder: (context, index) {
-                final file = files[index];
+                final fileEntity = files[index];
+                if (fileEntity is! File) return const SizedBox.shrink();
+                
+                final file = fileEntity;
+                final fileName = file.path.split('/').last.replaceAll('.canvas.json', '');
+                final stat = file.statSync();
+                
                 return ListTile(
                   leading: const Icon(Icons.insert_drive_file),
-                  title: Text(file.name),
+                  title: Text(fileName),
                   subtitle: Text(
-                    'Modified: ${file.lastModified.toString().split('.')[0]}\nSize: ${(file.size / 1024).toStringAsFixed(1)} KB',
+                    'Modified: ${stat.modified.toString().split('.')[0]}\nSize: ${(stat.size / 1024).toStringAsFixed(1)} KB',
                   ),
                   trailing: IconButton(
                     icon: const Icon(Icons.delete, color: Colors.red),
@@ -612,7 +618,7 @@ class SaveLoadUI extends StatelessWidget {
                         context: context,
                         builder: (context) => AlertDialog(
                           title: const Text('Delete Canvas'),
-                          content: Text('Delete "${file.name}"?'),
+                          content: Text('Delete "$fileName"?'),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(context, false),
@@ -630,7 +636,7 @@ class SaveLoadUI extends StatelessWidget {
                       );
 
                       if (confirm == true) {
-                        await canvasService.deleteCanvas(file.name);
+                        await canvasService.deleteCanvas(fileName);
                         if (context.mounted) {
                           Navigator.pop(context);
                           _showLoadDialog(context);
@@ -638,7 +644,7 @@ class SaveLoadUI extends StatelessWidget {
                       }
                     },
                   ),
-                  onTap: () => Navigator.pop(context, file.name),
+                  onTap: () => Navigator.pop(context, fileName),
                 );
               },
             ),

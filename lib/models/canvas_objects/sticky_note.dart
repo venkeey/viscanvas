@@ -30,9 +30,10 @@ class StickyNote extends CanvasObject {
 
   @override
   bool hitTest(Offset worldPoint) {
-    // StickyNote already has reasonable default size, but still allow for slight inflation
+    // Inflate bounds for easier hit detection - larger inflation for better selection
     final bounds = getBoundingRect();
-    return bounds.contains(worldPoint);
+    final inflatedBounds = bounds.inflate(16); // Added inflation for easier selection
+    return inflatedBounds.contains(worldPoint);
   }
 
   @override

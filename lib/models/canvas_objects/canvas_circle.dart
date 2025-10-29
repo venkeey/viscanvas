@@ -22,11 +22,9 @@ class CanvasCircle extends CanvasObject {
 
   @override
   bool hitTest(Offset worldPoint) {
-    // Inflate bounds slightly for easier hit detection of small shapes
+    // Inflate bounds for easier hit detection - larger inflation for better selection
     final bounds = getBoundingRect();
-    final inflatedBounds = radius < 10
-        ? bounds.inflate(10)
-        : bounds;
+    final inflatedBounds = bounds.inflate(16); // Increased from 10 to 16
     return inflatedBounds.contains(worldPoint);
   }
 

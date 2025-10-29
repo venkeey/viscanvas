@@ -91,7 +91,8 @@ class DocumentBlock extends CanvasObject {
   @override
   bool hitTest(Offset worldPoint) {
     final bounds = calculateBoundingRect();
-    final hit = bounds.contains(worldPoint);
+    final inflatedBounds = bounds.inflate(16); // Added inflation for easier selection
+    final hit = inflatedBounds.contains(worldPoint);
     if (hit) {
       CanvasLogger.documentBlock('Hit test passed for DocumentBlock ${id} at point $worldPoint');
     }

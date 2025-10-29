@@ -1,6 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
-import '../services/canvas_service.dart';
+import '../services/canvas/canvas_service.dart';
 import '../domain/connector_system.dart';
 import '../models/canvas_objects/canvas_object.dart';
 import '../models/canvas_objects/canvas_circle.dart';
