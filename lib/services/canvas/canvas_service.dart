@@ -33,7 +33,10 @@ class CanvasService extends ChangeNotifier {
   void Function(DocumentBlock)? onOpenDocumentEditor;
 
   // Core state
-  ToolType _currentTool = ToolType
+  ToolType _currentTool = ToolType.select;
+  Color _strokeColor = Colors.black;
+  Color _fillColor = Colors.transparent;
+  double _strokeWidth = 2.0;
 
   // Auto-save state
   Timer? _autoSaveTimer;
