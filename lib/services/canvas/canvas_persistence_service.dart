@@ -13,6 +13,8 @@ import '../../models/canvas_objects/canvas_circle.dart';
 import '../../models/canvas_objects/sticky_note.dart';
 import '../../models/canvas_objects/document_block.dart';
 import '../../models/canvas_objects/connector.dart';
+import '../../models/canvas_objects/canvas_text.dart';
+import '../../models/canvas_objects/canvas_comment.dart';
 import '../../models/documents/document_content.dart';
 
 // Canvas data structure for serialization
@@ -273,6 +275,31 @@ class CanvasPersistenceService {
           'padding': obj.style.padding,
         },
       } ..addAll({'debug_content_blocks': (obj.content?.blocks.length ?? 0)}), // Debug: add content block count
+      if (obj is CanvasText) ...{
+        'text': obj.text,
+        'size': {'width': obj.size.width, 'height': obj.size.height},
+        'fontSize': obj.fontSize,
+        'textAlign': obj.textAlign.toString().split('.').last,
+        'fontWeight': obj.fontWeight.index,
+        'textColor': obj.textColor.value,
+        'isEditing': obj.isEditing,
+        'maxWidth': obj.maxWidth,
+      },
+      if (obj is CanvasComment) ...{
+        'text': obj.text,
+        'author': obj.author,
+        'createdAt': obj.createdAt.toIso8601String(),
+        'parentCommentId': obj.parentCommentId,
+        'size': {'width': obj.size.width, 'height': obj.size.height},
+        'backgroundColor': obj.backgroundColor.value,
+        'fontSize': obj.fontSize,
+        'isResolved': obj.isResolved,
+        'isEditing': obj.isEditing,
+        'anchorPoint': obj.anchorPoint != null
+            ? {'dx': obj.anchorPoint!.dx, 'dy': obj.anchorPoint!.dy}
+            : null,
+        'replies': obj.replies.map((reply) => _serializeObject(reply)).toList(),
+      },
     };
   }
 
@@ -378,6 +405,66 @@ class CanvasPersistenceService {
             padding: json['style']?['padding']?.toDouble() ?? 16.0,
           ),
         );
+      case 'CanvasText':
+        final sizeData = json['size'];
+        return CanvasText(
+          id: json['id'],
+          worldPosition: Offset(json['worldPosition']['dx'], json['worldPosition']['dy']),
+          strokeColor: Color(json['strokeColor']),
+          strokeWidth: json['strokeWidth']?.toDouble() ?? 2.0,
+          isSelected: json['isSelected'] ?? false,
+          text: json['text'] ?? '',
+          size: sizeData != null
+              ? Size(sizeData['width']?.toDouble() ?? 200.0, sizeData['height']?.toDouble() ?? 30.0)
+              : const Size(200, 30),
+          fontSize: json['fontSize']?.toDouble() ?? 16.0,
+          textAlign: json['textAlign'] != null
+              ? TextAlign.values.firstWhere(
+                  (align) => align.toString().split('.').last == json['textAlign'],
+                  orElse: () => TextAlign.left,
+                )
+              : TextAlign.left,
+          fontWeight: json['fontWeight'] != null
+              ? FontWeight.values[json['fontWeight']]
+              : FontWeight.normal,
+          textColor: json['textColor'] != null ? Color(json['textColor']) : Colors.black,
+          isEditing: json['isEditing'] ?? false,
+          maxWidth: json['maxWidth']?.toDouble(),
+        );
+      case 'CanvasComment':
+        final sizeData = json['size'];
+        final comment = CanvasComment(
+          id: json['id'],
+          worldPosition: Offset(json['worldPosition']['dx'], json['worldPosition']['dy']),
+          strokeColor: Color(json['strokeColor']),
+          strokeWidth: json['strokeWidth']?.toDouble() ?? 2.0,
+          isSelected: json['isSelected'] ?? false,
+          text: json['text'] ?? '',
+          author: json['author'],
+          createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt']) : DateTime.now(),
+          parentCommentId: json['parentCommentId'],
+          size: sizeData != null
+              ? Size(sizeData['width']?.toDouble() ?? 250.0, sizeData['height']?.toDouble() ?? 80.0)
+              : const Size(250, 80),
+          backgroundColor: json['backgroundColor'] != null
+              ? Color(json['backgroundColor'])
+              : const Color(0xFFE3F2FD),
+          fontSize: json['fontSize']?.toDouble() ?? 14.0,
+          isResolved: json['isResolved'] ?? false,
+          isEditing: json['isEditing'] ?? false,
+          anchorPoint: json['anchorPoint'] != null
+              ? Offset(json['anchorPoint']['dx'], json['anchorPoint']['dy'])
+              : null,
+          replies: [],
+        );
+        // Deserialize replies recursively
+        if (json['replies'] != null && json['replies'] is List) {
+          for (var replyJson in json['replies']) {
+            final reply = _deserializeObject(replyJson as Map<String, dynamic>) as CanvasComment;
+            comment.addReply(reply);
+          }
+        }
+        return comment;
       default:
         throw Exception('Unknown object type: $type');
     }

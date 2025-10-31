@@ -91,6 +91,8 @@ abstract class CanvasObject {
     if (typeName == 'Connector') return 'Connector';
     if (typeName == 'DocumentBlock') return 'Document';
     if (typeName == 'FreehandPath') return 'Drawing';
+    if (typeName == 'CanvasText') return 'Text';
+    if (typeName == 'CanvasComment') return 'Comment';
     return typeName;
   }
 }

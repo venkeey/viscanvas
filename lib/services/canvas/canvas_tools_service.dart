@@ -10,6 +10,8 @@ import '../../models/canvas_objects/canvas_circle.dart';
 import '../../models/canvas_objects/sticky_note.dart';
 import '../../models/canvas_objects/document_block.dart';
 import '../../models/canvas_objects/connector.dart';
+import '../../models/canvas_objects/canvas_text.dart';
+import '../../models/canvas_objects/canvas_comment.dart';
 import '../../utils/logger.dart';
 import 'canvas_connector_service.dart';
 
@@ -38,8 +40,14 @@ class CanvasToolsService {
 
   // Text editing state
   StickyNote? _editingStickyNote;
+  CanvasText? _editingText;
+  CanvasComment? _editingComment;
   Timer? _doubleTapTimer;
   Offset? _lastTapPosition;
+  
+  // Callbacks for editing
+  void Function(CanvasText)? onStartEditingText;
+  void Function(CanvasComment)? onStartEditingComment;
 
   CanvasToolsService(
     this._repository,
@@ -57,17 +65,35 @@ class CanvasToolsService {
 
   /// Get the appropriate cursor for a hover position
   /// Returns the cursor to show when hovering over resize handles on selected objects
+  /// or when hovering over movable areas of objects
   MouseCursor? getCursorForHover(Offset screenPoint, Transform2D transform) {
-    // Only show resize cursor when select tool is active and objects are selected
+    final worldPoint = transform.screenToWorld(screenPoint);
+    
+    // Check for resize handles on selected objects first (highest priority)
     final selected = _repository.getSelected();
-    if (selected.isEmpty) return null;
-
-    for (var obj in selected) {
-      final handle = _getResizeHandle(obj, screenPoint, transform);
-      if (handle != ResizeHandle.none) {
-        return _getCursorForResizeHandle(handle);
+    if (selected.isNotEmpty) {
+      for (var obj in selected) {
+        final handle = _getResizeHandle(obj, screenPoint, transform);
+        if (handle != ResizeHandle.none) {
+          return _getCursorForResizeHandle(handle);
+        }
       }
     }
+    
+    // Check if hovering over any object that can be moved
+    final hitObj = _hitTestUseCase.execute(worldPoint);
+    if (hitObj != null) {
+      // For CanvasText, only show move cursor on edges
+      if (hitObj is CanvasText) {
+        if (hitObj.isOnEdge(worldPoint)) {
+          return SystemMouseCursors.move;
+        }
+      } else {
+        // For all other objects, show move cursor anywhere on the object
+        return SystemMouseCursors.move;
+      }
+    }
+    
     return null;
   }
 
@@ -96,6 +122,7 @@ class CanvasToolsService {
     }
 
     if (currentTool == ToolType.select) {
+      // First check for resize handles on selected objects
       for (var obj in _repository.getSelected()) {
         _resizeHandle = _getResizeHandle(obj, screenPoint, transform);
         if (_resizeHandle != ResizeHandle.none) {
@@ -106,19 +133,57 @@ class CanvasToolsService {
         }
       }
 
+      // Check if dragging on an already-selected CanvasText
+      final selectedTextObjects = _repository.getSelected().whereType<CanvasText>().toList();
+      if (selectedTextObjects.isNotEmpty) {
+        final selectedText = selectedTextObjects.first;
+        if (selectedText.hitTest(worldPoint)) {
+          // Check if drag starts from edge
+          if (selectedText.isOnEdge(worldPoint)) {
+            // Allow moving from edge
+            _preMoveState = {selectedText.id: selectedText.clone()};
+            CanvasLogger.canvasService('Drag start on selected CanvasText from edge - will allow moving');
+          } else {
+            // Don't allow moving if drag starts from center
+            _preMoveState = null;
+            CanvasLogger.canvasService('Drag start on selected CanvasText from center - moving disabled');
+          }
+          return;
+        }
+      }
+
       final hitObj = _hitTestUseCase.execute(worldPoint);
       if (hitObj != null) {
-        _clearSelection();
-        _selectObjectUseCase.execute(hitObj.id);
-        _preMoveState = {hitObj.id: hitObj.clone()};
-        onSelectionChanged?.call();
-        CanvasLogger.canvasService('Selected ${hitObj.runtimeType}(${hitObj.id})');
+        // Special handling for CanvasText: only allow moving from edges
+        if (hitObj is CanvasText) {
+          // Check if drag is starting from an edge
+          if (hitObj.isOnEdge(worldPoint)) {
+            _clearSelection();
+            _selectObjectUseCase.execute(hitObj.id);
+            _preMoveState = {hitObj.id: hitObj.clone()};
+            onSelectionChanged?.call();
+            CanvasLogger.canvasService('Selected ${hitObj.runtimeType}(${hitObj.id}) from edge - will allow moving');
+          } else {
+            // Select but don't allow moving if drag is from center
+            _clearSelection();
+            _selectObjectUseCase.execute(hitObj.id);
+            onSelectionChanged?.call();
+            CanvasLogger.canvasService('Selected ${hitObj.runtimeType}(${hitObj.id}) from center - moving disabled');
+          }
+        } else {
+          _clearSelection();
+          _selectObjectUseCase.execute(hitObj.id);
+          _preMoveState = {hitObj.id: hitObj.clone()};
+          onSelectionChanged?.call();
+          CanvasLogger.canvasService('Selected ${hitObj.runtimeType}(${hitObj.id})');
+        }
         return;
       }
       _clearSelection();
       onSelectionChanged?.call();
       CanvasLogger.canvasService('Selection cleared');
-    } else if (currentTool != ToolType.pan) {
+    } else if (currentTool != ToolType.pan && currentTool != ToolType.text) {
+      // Text tool creates objects on tap, not on pan start
       _tempObject = _createObject(worldPoint, currentTool, strokeColor, fillColor, strokeWidth);
       if (_tempObject != null) {
         // Don't add to repository yet - wait until onPanEnd for real-time sizing
@@ -163,18 +228,33 @@ class CanvasToolsService {
         onObjectModified?.call();
         CanvasLogger.canvasService('Resizing ${selectedObj.runtimeType}(${selectedObj.id}) handle=$_resizeHandle delta=$worldDelta');
       } else {
-        final worldDelta = worldPoint - _dragStart!;
-        final movedIds = <String>{};
-        for (var obj in _repository.getSelected()) {
-          obj.move(worldDelta);
-          movedIds.add(obj.id);
-        }
-        // Optimized: Only update connectors connected to moved objects
-        _updateConnectors(movedObjectIds: movedIds);
-        _dragStart = worldPoint;
-        onObjectModified?.call();
-        if (movedIds.isNotEmpty) {
-          CanvasLogger.canvasService('Moved objects ${movedIds.join(', ')} delta=$worldDelta');
+        // Only move objects if _preMoveState is set (was dragged from edge for CanvasText)
+        if (_preMoveState != null && _preMoveState!.isNotEmpty) {
+          final worldDelta = worldPoint - _dragStart!;
+          final movedIds = <String>{};
+          for (var obj in _repository.getSelected()) {
+            // Double-check for CanvasText: only move if dragging from edge
+            if (obj is CanvasText) {
+              // Check if still on edge during drag
+              final startWorldPoint = _dragStart!;
+              if (!obj.isOnEdge(startWorldPoint)) {
+                // Was not dragged from edge, skip moving
+                continue;
+              }
+            }
+            obj.move(worldDelta);
+            movedIds.add(obj.id);
+          }
+          // Optimized: Only update connectors connected to moved objects
+          if (movedIds.isNotEmpty) {
+            _updateConnectors(movedObjectIds: movedIds);
+            _dragStart = worldPoint;
+            onObjectModified?.call();
+            CanvasLogger.canvasService('Moved objects ${movedIds.join(', ')} delta=$worldDelta');
+          }
+        } else {
+          // _preMoveState is null or empty, don't move (e.g., CanvasText dragged from center)
+          CanvasLogger.canvasService('Skipping move - _preMoveState is null/empty (may be CanvasText dragged from center)');
         }
       }
     } else if (_tempObject != null) {
@@ -208,9 +288,14 @@ class CanvasToolsService {
 
     // Commit temporary object to repository if it exists
     if (_tempObject != null) {
-      _commandHistory.execute(CreateObjectCommand(_repository, _tempObject!));
+      final createdObject = _tempObject!;
+      _commandHistory.execute(CreateObjectCommand(_repository, createdObject));
+      
+      // Don't auto-edit on creation - user can double tap to edit
+      // Text and comment objects will be selected and can be edited via double tap
+      
       // After creating an object, switch back to select mode so user can immediately interact with it
-      CanvasLogger.canvasService('Created ${_tempObject!.runtimeType}(${_tempObject!.id}); switching tool to select');
+      CanvasLogger.canvasService('Created ${createdObject.runtimeType}(${createdObject.id}); switching tool to select');
       onToolChanged?.call(ToolType.select);
       onObjectCreated?.call();
     }
@@ -223,9 +308,22 @@ class CanvasToolsService {
     _lastWorldPoint = null;
   }
 
-  void onTap(Offset screenPoint, Transform2D transform) {
+  void onTap(Offset screenPoint, Transform2D transform, ToolType currentTool, Color strokeColor, Color fillColor, double strokeWidth) {
     final worldPoint = transform.screenToWorld(screenPoint);
-    CanvasLogger.canvasService('onTap world=$worldPoint');
+    CanvasLogger.canvasService('onTap world=$worldPoint tool=$currentTool');
+    
+    // If text tool is selected, create text object immediately on tap
+    if (currentTool == ToolType.text) {
+      final textObj = _createObject(worldPoint, ToolType.text, strokeColor, fillColor, strokeWidth);
+      if (textObj != null) {
+        _commandHistory.execute(CreateObjectCommand(_repository, textObj));
+        // Switch to select mode after creating text
+        onToolChanged?.call(ToolType.select);
+        onObjectCreated?.call();
+        CanvasLogger.canvasService('Created ${textObj.runtimeType}(${textObj.id}) via tap');
+      }
+      return;
+    }
     
     // Handle object selection on tap (same logic as onPanStart for select tool)
     final hitObj = _hitTestUseCase.execute(worldPoint);
@@ -336,6 +434,21 @@ class CanvasToolsService {
           _lastTapPosition = null;
         });
       }
+    } else if (hitObj is CanvasText) {
+      if (_lastTapPosition != null &&
+          (worldPoint - _lastTapPosition!).distance < 10) {
+        // Double tap detected on text
+        _startEditingText(hitObj);
+        _doubleTapTimer?.cancel();
+        _lastTapPosition = null;
+      } else {
+        // First tap
+        _lastTapPosition = worldPoint;
+        _doubleTapTimer?.cancel();
+        _doubleTapTimer = Timer(const Duration(milliseconds: 300), () {
+          _lastTapPosition = null;
+        });
+      }
     } else {
       _lastTapPosition = null;
       _doubleTapTimer?.cancel();
@@ -347,6 +460,22 @@ class CanvasToolsService {
     stickyNote.isEditing = true;
     onObjectModified?.call();
     CanvasLogger.canvasService('Start editing StickyNote(${stickyNote.id})');
+  }
+
+  void _startEditingText(CanvasText canvasText) {
+    _editingText = canvasText;
+    canvasText.isEditing = true;
+    onObjectModified?.call();
+    onStartEditingText?.call(canvasText);
+    CanvasLogger.canvasService('Start editing CanvasText(${canvasText.id})');
+  }
+
+  void _startEditingComment(CanvasComment canvasComment) {
+    _editingComment = canvasComment;
+    canvasComment.isEditing = true;
+    onObjectModified?.call();
+    onStartEditingComment?.call(canvasComment);
+    CanvasLogger.canvasService('Start editing CanvasComment(${canvasComment.id})');
   }
 
   void _openDocumentEditor(DocumentBlock documentBlock) {
@@ -401,6 +530,29 @@ class CanvasToolsService {
           strokeWidth: strokeWidth,
           documentId: 'doc_${DateTime.now().millisecondsSinceEpoch}',
           size: const Size(400, 300),
+        );
+      case ToolType.text:
+        return CanvasText(
+          id: id,
+          worldPosition: worldPoint,
+          strokeColor: strokeColor,
+          strokeWidth: strokeWidth,
+          text: '', // Empty text, will open editor immediately
+          fontSize: 16.0,
+          textColor: strokeColor, // Use stroke color for text
+          size: const Size(200, 30), // Default size, will auto-resize
+        );
+      case ToolType.comment:
+        return CanvasComment(
+          id: id,
+          worldPosition: worldPoint,
+          strokeColor: strokeColor,
+          strokeWidth: strokeWidth,
+          text: '', // Empty text, will open editor
+          backgroundColor: const Color(0xFFE3F2FD), // Light blue
+          size: const Size(250, 80),
+          fontSize: 14.0,
+          createdAt: DateTime.now(),
         );
       default:
         return null;
@@ -470,6 +622,37 @@ class CanvasToolsService {
       // Update size with minimum constraints
       (_tempObject as StickyNote).size = Size(
         max(100.0, width),
+        max(60.0, height)
+      );
+    } else if (_tempObject is CanvasText) {
+      // Text boxes can be sized by dragging
+      final minX = min(_dragStart!.dx, worldPoint.dx);
+      final maxX = max(_dragStart!.dx, worldPoint.dx);
+      final minY = min(_dragStart!.dy, worldPoint.dy);
+      final maxY = max(_dragStart!.dy, worldPoint.dy);
+      
+      final width = maxX - minX;
+      final height = maxY - minY;
+      
+      (_tempObject as CanvasText).worldPosition = Offset(minX, minY);
+      (_tempObject as CanvasText).size = Size(
+        max(50.0, width),
+        max(20.0, height)
+      );
+      (_tempObject as CanvasText).maxWidth = max(50.0, width);
+    } else if (_tempObject is CanvasComment) {
+      // Calculate bounding box from drag start to current point
+      final minX = min(_dragStart!.dx, worldPoint.dx);
+      final maxX = max(_dragStart!.dx, worldPoint.dx);
+      final minY = min(_dragStart!.dy, worldPoint.dy);
+      final maxY = max(_dragStart!.dy, worldPoint.dy);
+      
+      final width = maxX - minX;
+      final height = maxY - minY;
+      
+      (_tempObject as CanvasComment).worldPosition = Offset(minX, minY);
+      (_tempObject as CanvasComment).size = Size(
+        max(150.0, width),
         max(60.0, height)
       );
     }

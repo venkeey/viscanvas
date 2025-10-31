@@ -5,6 +5,8 @@ import '../../domain/canvas_domain.dart';
 import '../../models/canvas_objects/canvas_object.dart';
 import '../../models/canvas_objects/document_block.dart';
 import '../../models/canvas_objects/connector.dart';
+import '../../models/canvas_objects/canvas_text.dart';
+import '../../models/canvas_objects/canvas_comment.dart';
 import '../../models/documents/document_content.dart';
 import 'canvas_persistence_service.dart';
 import 'canvas_tools_service.dart';
@@ -29,8 +31,10 @@ class CanvasService extends ChangeNotifier {
   late final CanvasDocumentService _documentService;
   late final CanvasTransformService _transformService;
 
-  // Callback for opening document editor (set by canvas screen)
+  // Callbacks for editing (set by canvas screen)
   void Function(DocumentBlock)? onOpenDocumentEditor;
+  void Function(CanvasText)? onStartEditingText;
+  void Function(CanvasComment)? onStartEditingComment;
 
   // Core state
   ToolType _currentTool = ToolType.select;
@@ -77,6 +81,8 @@ class CanvasService extends ChangeNotifier {
     _connectorService.onConnectorStateChanged = () => notifyListeners();
     _documentService.onOpenDocumentEditor = onOpenDocumentEditor;
     _documentService.onDocumentChanged = () => notifyListeners();
+    _toolsService.onStartEditingText = onStartEditingText;
+    _toolsService.onStartEditingComment = onStartEditingComment;
 
     // Respect global flag for tests
     _autoSaveEnabled = globalAutoSaveEnabled;
@@ -111,10 +117,19 @@ class CanvasService extends ChangeNotifier {
   Offset? get lastWorldPoint => _toolsService.lastWorldPoint;
   CanvasObject? get tempObject => _toolsService.tempObject;
 
-  // Cursor management for resize handles
+  // Cursor management for resize handles and tools
   MouseCursor? getCursorForHover(Offset screenPoint) {
-    if (_currentTool != ToolType.select) return null;
-    return _toolsService.getCursorForHover(screenPoint, _transformService.transform);
+    // Show text cursor when text tool is selected
+    if (_currentTool == ToolType.text) {
+      return SystemMouseCursors.text;
+    }
+    
+    // Show resize handles cursor when select tool is active
+    if (_currentTool == ToolType.select) {
+      return _toolsService.getCursorForHover(screenPoint, _transformService.transform);
+    }
+    
+    return null;
   }
 
   // Tool management
@@ -215,7 +230,7 @@ class CanvasService extends ChangeNotifier {
   }
 
   void onTap(Offset screenPoint) {
-    _toolsService.onTap(screenPoint, _transformService.transform);
+    _toolsService.onTap(screenPoint, _transformService.transform, _currentTool, _strokeColor, _fillColor, _strokeWidth);
   }
 
   // Document editing

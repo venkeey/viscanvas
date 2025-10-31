@@ -271,7 +271,8 @@ class _SidebarButton extends StatelessWidget {
     
     if (isGrayedOut) {
       iconColor = Colors.grey.shade400;
-    } else if (isHighlighted) {
+    } else if (isSelected && isHighlighted) {
+      // Only show highlight when both selected and highlighted
       iconColor = highlightColor ?? Colors.purple;
       backgroundColor = (highlightColor ?? Colors.purple).withOpacity(0.1);
     } else if (isSelected) {
@@ -290,9 +291,9 @@ class _SidebarButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: backgroundColor,
           borderRadius: BorderRadius.circular(8),
-          border: isSelected || isHighlighted
+          border: isSelected
               ? Border.all(
-                  color: isHighlighted 
+                  color: (isSelected && isHighlighted) 
                       ? (highlightColor ?? Colors.purple)
                       : Colors.blue,
                   width: 2,

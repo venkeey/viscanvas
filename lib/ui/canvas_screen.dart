@@ -6,6 +6,8 @@ import '../widgets/shapes_panel.dart';
 import '../models/canvas_objects/sticky_note.dart';
 import '../models/canvas_objects/canvas_object.dart';
 import '../models/canvas_objects/document_block.dart';
+import '../models/canvas_objects/canvas_text.dart';
+import '../models/canvas_objects/canvas_comment.dart';
 import '../domain/canvas_domain.dart';
 import '../models/documents/document_content.dart';
 import '../models/documents/block_types.dart';
@@ -32,6 +34,11 @@ class _CanvasScreenState extends State<CanvasScreen> {
   bool _showShapesPanel = false;
   MouseCursor _currentCursor = SystemMouseCursors.basic;
 
+  // Inline text editing state
+  CanvasText? _editingTextObject;
+  final TextEditingController _inlineTextController = TextEditingController();
+  final FocusNode _inlineTextFocusNode = FocusNode();
+
   // Public getter for testing
   CanvasService get service => _service;
 
@@ -40,62 +47,107 @@ class _CanvasScreenState extends State<CanvasScreen> {
     super.initState();
     _service = CanvasService();
     _service.onOpenDocumentEditor = _openDocumentEditor;
+    _service.onStartEditingText = _startInlineTextEditing;
+    _service.onStartEditingComment = _showCommentEditingDialog;
 
     _focusNode.requestFocus(); // Enable keyboard focus for backspace deletion
+
+    // Listen to focus changes to save text when focus is lost
+    _inlineTextFocusNode.addListener(() {
+      if (!_inlineTextFocusNode.hasFocus && _editingTextObject != null) {
+        _finishInlineTextEditing();
+      }
+    });
   }
 
   @override
   void dispose() {
     _service.dispose();
     _focusNode.dispose();
+    _inlineTextController.dispose();
+    _inlineTextFocusNode.dispose();
     super.dispose();
   }
 
   void _handleKeyEvent(KeyEvent event) {
-    // Debug logging for keyboard events
-    print('🔍 KeyEvent received: ${event.runtimeType} - ${event.logicalKey} - physical: ${event.physicalKey} - character: ${event.character}');
-    print('🔍 HardwareKeyboard state - Ctrl: ${HardwareKeyboard.instance.isControlPressed}, Shift: ${HardwareKeyboard.instance.isShiftPressed}');
-
+    // Only handle shortcuts with modifiers (Ctrl+ or Shift+)
+    // Don't intercept regular character input at all
     if (event is KeyDownEvent) {
+      // If this is character input (not a shortcut), ignore it completely
+      // This allows TextFields in dialogs to receive input
+      if (event.character != null && event.character!.isNotEmpty && 
+          !HardwareKeyboard.instance.isControlPressed && 
+          !HardwareKeyboard.instance.isShiftPressed) {
+        return;
+      }
+      
+      // Check if any TextField or editable widget has focus
+      // This prevents keyboard handler from intercepting text input
+      final focusManager = FocusManager.instance;
+      if (focusManager.primaryFocus != null) {
+        final focusedContext = focusManager.primaryFocus?.context;
+        if (focusedContext != null) {
+          // Check if focused widget or any ancestor is a TextField/TextFormField
+          final focusedWidget = focusedContext.findAncestorWidgetOfExactType<TextField>() ??
+              focusedContext.findAncestorWidgetOfExactType<TextFormField>();
+          if (focusedWidget != null) {
+            // TextField has focus, don't intercept keyboard events
+            return;
+          }
+        }
+      }
+      
+      final isCtrl = HardwareKeyboard.instance.isControlPressed;
+      final isShift = HardwareKeyboard.instance.isShiftPressed;
+      
       // Test-friendly shortcut: Ctrl+Shift+Delete clears the canvas
-      if (HardwareKeyboard.instance.isControlPressed && HardwareKeyboard.instance.isShiftPressed &&
+      if (isCtrl && isShift &&
           (event.logicalKey == LogicalKeyboardKey.delete || event.logicalKey == LogicalKeyboardKey.backspace)) {
         _service.deleteAll();
         return;
       }
+      
       // Test-friendly shortcut: Ctrl+Shift+5 sets zoom to 50%
-      if (HardwareKeyboard.instance.isControlPressed && HardwareKeyboard.instance.isShiftPressed &&
-          event.logicalKey == LogicalKeyboardKey.digit5) {
+      if (isCtrl && isShift && event.logicalKey == LogicalKeyboardKey.digit5) {
         _service.updateTransform(_service.transform.translation, 0.5);
         return;
       }
-      if (event.logicalKey == LogicalKeyboardKey.delete || event.logicalKey == LogicalKeyboardKey.backspace) {
-        _service.deleteSelected();
-      } else if (event.logicalKey == LogicalKeyboardKey.escape) {
-        _service.setTool(ToolType.select);
-        setState(() {
-          _showShapesPanel = false;
-        });
-      } else if (event.logicalKey == LogicalKeyboardKey.keyP) {
-        _service.setTool(ToolType.pan);
-      } else if (event.logicalKey == LogicalKeyboardKey.keyV) {
-        _service.setTool(ToolType.select);
-      } else if (event.logicalKey == LogicalKeyboardKey.keyB) {
-        _service.setTool(ToolType.pen);
-      } else if (event.logicalKey == LogicalKeyboardKey.keyC) {
-        _service.setTool(ToolType.connector);
-      } else if (event.logicalKey == LogicalKeyboardKey.keyR) {
-        _service.setTool(ToolType.rectangle);
-      } else if (event.logicalKey == LogicalKeyboardKey.keyO) {
-        _service.setTool(ToolType.circle);
-      } else if (event.logicalKey == LogicalKeyboardKey.keyD) {
-        _service.setTool(ToolType.document_block);
-      } else if (HardwareKeyboard.instance.isControlPressed) {
+      
+      // Tool shortcuts with Ctrl modifier
+      if (isCtrl && !isShift) {
         if (event.logicalKey == LogicalKeyboardKey.keyZ) {
           _service.undo();
         } else if (event.logicalKey == LogicalKeyboardKey.keyY) {
           _service.redo();
+        } else if (event.logicalKey == LogicalKeyboardKey.keyP) {
+          _service.setTool(ToolType.pan);
+        } else if (event.logicalKey == LogicalKeyboardKey.keyV) {
+          _service.setTool(ToolType.select);
+        } else if (event.logicalKey == LogicalKeyboardKey.keyB) {
+          _service.setTool(ToolType.pen);
+        } else if (event.logicalKey == LogicalKeyboardKey.keyC) {
+          _service.setTool(ToolType.connector);
+        } else if (event.logicalKey == LogicalKeyboardKey.keyR) {
+          _service.setTool(ToolType.rectangle);
+        } else if (event.logicalKey == LogicalKeyboardKey.keyO) {
+          _service.setTool(ToolType.circle);
+        } else if (event.logicalKey == LogicalKeyboardKey.keyD) {
+          _service.setTool(ToolType.document_block);
         }
+      }
+      
+      // Delete selected with Shift+Delete (only when no modifier conflicts)
+      if (isShift && !isCtrl &&
+          (event.logicalKey == LogicalKeyboardKey.delete || event.logicalKey == LogicalKeyboardKey.backspace)) {
+        _service.deleteSelected();
+      }
+      
+      // Escape key always works (no modifier needed)
+      if (event.logicalKey == LogicalKeyboardKey.escape) {
+        _service.setTool(ToolType.select);
+        setState(() {
+          _showShapesPanel = false;
+        });
       }
     }
   }
@@ -247,11 +299,11 @@ class _CanvasScreenState extends State<CanvasScreen> {
     // For now, we'll use a simple approach - show text editing dialog if a sticky note is selected
     final selectedObjects = _service.objects.where((obj) => obj.isSelected).toList();
     if (selectedObjects.isNotEmpty && selectedObjects.first is StickyNote) {
-      _showTextEditingDialog(selectedObjects.first as StickyNote);
+      _showStickyNoteEditingDialog(selectedObjects.first as StickyNote);
     }
   }
 
-  void _showTextEditingDialog(StickyNote stickyNote) {
+  void _showStickyNoteEditingDialog(StickyNote stickyNote) {
     final controller = TextEditingController(text: stickyNote.text);
 
     showDialog(
@@ -280,6 +332,410 @@ class _CanvasScreenState extends State<CanvasScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  // Inline text editing methods
+  void _startInlineTextEditing(CanvasText canvasText) {
+    print('🖊️ Starting inline text editing for ${canvasText.id}');
+    setState(() {
+      _editingTextObject = canvasText;
+      _inlineTextController.text = canvasText.text;
+      canvasText.isEditing = true;
+    });
+
+    // Request focus after the widget is built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _inlineTextFocusNode.requestFocus();
+    });
+  }
+
+  void _finishInlineTextEditing() {
+    if (_editingTextObject == null) return;
+
+    print('💾 Finishing inline text editing');
+    final textObj = _editingTextObject!;
+    textObj.text = _inlineTextController.text;
+    textObj.isEditing = false;
+    textObj.invalidateCache();
+
+    setState(() {
+      _editingTextObject = null;
+      _inlineTextController.clear();
+    });
+
+    // Return focus to canvas
+    _focusNode.requestFocus();
+  }
+
+  void _cancelInlineTextEditing() {
+    if (_editingTextObject == null) return;
+
+    print('❌ Canceling inline text editing');
+    _editingTextObject!.isEditing = false;
+
+    setState(() {
+      _editingTextObject = null;
+      _inlineTextController.clear();
+    });
+
+    // Return focus to canvas
+    _focusNode.requestFocus();
+  }
+
+  Widget _buildInlineTextEditor(CanvasText textObj) {
+    // Convert world position to screen position
+    final screenPos = _service.transform.worldToScreen(textObj.worldPosition);
+    final bounds = textObj.getBoundingRect();
+    final screenWidth = bounds.width * _service.transform.scale;
+    final screenHeight = bounds.height * _service.transform.scale;
+
+    return Positioned(
+      left: screenPos.dx,
+      top: screenPos.dy,
+      child: Container(
+        width: screenWidth.clamp(100.0, 500.0),
+        constraints: BoxConstraints(
+          minHeight: screenHeight.clamp(30.0, double.infinity),
+        ),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: Colors.blue, width: 2),
+          borderRadius: BorderRadius.circular(4),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(8),
+        child: KeyboardListener(
+          focusNode: FocusNode(),
+          onKeyEvent: (event) {
+            if (event is KeyDownEvent) {
+              if (event.logicalKey == LogicalKeyboardKey.enter &&
+                  !HardwareKeyboard.instance.isShiftPressed) {
+                _finishInlineTextEditing();
+              } else if (event.logicalKey == LogicalKeyboardKey.escape) {
+                _cancelInlineTextEditing();
+              }
+            }
+          },
+          child: TextField(
+            controller: _inlineTextController,
+            focusNode: _inlineTextFocusNode,
+            maxLines: null,
+            style: TextStyle(
+              fontSize: textObj.fontSize.clamp(12.0, 24.0),
+              fontWeight: textObj.fontWeight,
+              color: textObj.textColor,
+            ),
+            decoration: const InputDecoration(
+              border: InputBorder.none,
+              isDense: true,
+              contentPadding: EdgeInsets.zero,
+            ),
+            textAlign: textObj.textAlign,
+            onSubmitted: (_) => _finishInlineTextEditing(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showTextEditingDialog(CanvasText canvasText) {
+    final controller = TextEditingController(text: canvasText.text);
+    TextAlign selectedAlign = canvasText.textAlign;
+    FontWeight selectedWeight = canvasText.fontWeight;
+    double selectedSize = canvasText.fontSize;
+    Color selectedColor = canvasText.textColor;
+
+    // Create a FocusNode for the text field
+    final textFieldFocusNode = FocusNode();
+    
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) {
+        // Request focus after dialog is built - only once
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (textFieldFocusNode.canRequestFocus) {
+            textFieldFocusNode.requestFocus();
+          }
+        });
+        
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Edit Text'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: controller,
+                      focusNode: textFieldFocusNode,
+                      maxLines: null,
+                      enabled: true,
+                      readOnly: false,
+                      showCursor: true,
+                      cursorWidth: 2.0,
+                      cursorColor: Colors.blue,
+                      cursorRadius: const Radius.circular(1.0),
+                      decoration: const InputDecoration(
+                        hintText: 'Enter your text here...',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+                  const Text('Font Size'),
+                  Slider(
+                    value: selectedSize,
+                    min: 8,
+                    max: 72,
+                    divisions: 64,
+                    label: selectedSize.toStringAsFixed(0),
+                    onChanged: (value) {
+                      setState(() => selectedSize = value);
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  const Text('Text Alignment'),
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.format_align_left),
+                        onPressed: () {
+                          setState(() => selectedAlign = TextAlign.left);
+                        },
+                        color: selectedAlign == TextAlign.left ? Colors.blue : Colors.grey,
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.format_align_center),
+                        onPressed: () {
+                          setState(() => selectedAlign = TextAlign.center);
+                        },
+                        color: selectedAlign == TextAlign.center ? Colors.blue : Colors.grey,
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.format_align_right),
+                        onPressed: () {
+                          setState(() => selectedAlign = TextAlign.right);
+                        },
+                        color: selectedAlign == TextAlign.right ? Colors.blue : Colors.grey,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text('Font Weight'),
+                  Row(
+                    children: [
+                      TextButton(
+                        onPressed: () {
+                          setState(() => selectedWeight = FontWeight.normal);
+                        },
+                        child: Text(
+                          'Normal',
+                          style: TextStyle(
+                            fontWeight: selectedWeight == FontWeight.normal
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          setState(() => selectedWeight = FontWeight.bold);
+                        },
+                        child: Text(
+                          'Bold',
+                          style: TextStyle(
+                            fontWeight: selectedWeight == FontWeight.bold
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text('Text Color'),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      Colors.black,
+                      Colors.blue,
+                      Colors.red,
+                      Colors.green,
+                      Colors.orange,
+                      Colors.purple,
+                    ].map((color) {
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() => selectedColor = color);
+                        },
+                        child: Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: color,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: selectedColor == color ? Colors.blue : Colors.grey,
+                              width: selectedColor == color ? 3 : 1,
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  textFieldFocusNode.dispose();
+                  canvasText.isEditing = false;
+                  Navigator.pop(context);
+                },
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  canvasText.text = controller.text;
+                  canvasText.fontSize = selectedSize;
+                  canvasText.textAlign = selectedAlign;
+                  canvasText.fontWeight = selectedWeight;
+                  canvasText.textColor = selectedColor;
+                  canvasText.isEditing = false;
+                  canvasText.invalidateCache();
+                  // Trigger service update notification
+                  setState(() {});
+                  textFieldFocusNode.dispose();
+                  Navigator.pop(context);
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
+        );
+      },
+    );
+  }
+
+  void _showCommentEditingDialog(CanvasComment canvasComment) {
+    final controller = TextEditingController(text: canvasComment.text);
+    String? authorName = canvasComment.author;
+    bool isResolved = canvasComment.isResolved;
+    final commentFocusNode = FocusNode();
+    final authorFocusNode = FocusNode();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        // Request focus after dialog is built
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (commentFocusNode.canRequestFocus) {
+            commentFocusNode.requestFocus();
+          }
+        });
+        
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Edit Comment'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Comment'),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: controller,
+                      focusNode: commentFocusNode,
+                      maxLines: 5,
+                      enabled: true,
+                      readOnly: false,
+                      showCursor: true,
+                      cursorWidth: 2.0,
+                      cursorColor: Colors.blue,
+                      cursorRadius: const Radius.circular(1.0),
+                      decoration: const InputDecoration(
+                        hintText: 'Enter your comment...',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+                  const Text('Author (optional)'),
+                  const SizedBox(height: 8),
+                  TextField(
+                    focusNode: authorFocusNode,
+                    onChanged: (value) {
+                      setState(() => authorName = value.isEmpty ? null : value);
+                    },
+                    enabled: true,
+                    readOnly: false,
+                    showCursor: true,
+                    cursorWidth: 2.0,
+                    cursorColor: Colors.blue,
+                    cursorRadius: const Radius.circular(1.0),
+                    decoration: const InputDecoration(
+                      hintText: 'Your name',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.person),
+                    ),
+                    controller: TextEditingController(text: authorName ?? ''),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: isResolved,
+                        onChanged: (value) {
+                          setState(() => isResolved = value ?? false);
+                        },
+                      ),
+                      const Text('Mark as resolved'),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  commentFocusNode.dispose();
+                  authorFocusNode.dispose();
+                  canvasComment.isEditing = false;
+                  Navigator.pop(context);
+                },
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  canvasComment.text = controller.text;
+                  canvasComment.author = authorName;
+                  canvasComment.isResolved = isResolved;
+                  canvasComment.isEditing = false;
+                  canvasComment.invalidateCache();
+                  setState(() {});
+                  commentFocusNode.dispose();
+                  authorFocusNode.dispose();
+                  Navigator.pop(context);
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
+        );
+      },
     );
   }
 
@@ -447,6 +903,28 @@ class _CanvasScreenState extends State<CanvasScreen> {
                               _service.onTap(details.localPosition);
                               _handleCanvasTap();
                             },
+                            // Add double-tap handler for text editing
+                            onDoubleTap: () {
+                              print('🖱️ Double-tap detected on canvas');
+                              // Double-tap detected, check if a text object is selected
+                              final selected = _service.objects.where((o) => o.isSelected).toList();
+                              if (selected.isNotEmpty) {
+                                final selectedObj = selected.first;
+                                print('  Selected object: ${selectedObj.runtimeType}');
+                                if (selectedObj is CanvasText) {
+                                  print('  Opening inline text editor for CanvasText');
+                                  _startInlineTextEditing(selectedObj);
+                                } else if (selectedObj is StickyNote) {
+                                  print('  Opening sticky note editor');
+                                  selectedObj.isEditing = true;
+                                  _showStickyNoteEditingDialog(selectedObj);
+                                } else if (selectedObj is CanvasComment) {
+                                  print('  Opening comment editor');
+                                  selectedObj.isEditing = true;
+                                  _showCommentEditingDialog(selectedObj);
+                                }
+                              }
+                            },
                             onScaleStart: (details) {
                               _service.onPanStart(details.localFocalPoint);
                             },
@@ -551,6 +1029,10 @@ class _CanvasScreenState extends State<CanvasScreen> {
                             onCancel: () => _service.cancelFreehandConnection(),
                           ),
                         ),
+
+                      // Inline Text Editor Overlay
+                      if (_editingTextObject != null)
+                        _buildInlineTextEditor(_editingTextObject!),
 
                     ],
                   ),
