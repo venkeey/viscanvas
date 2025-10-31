@@ -7,7 +7,9 @@ import '../../models/canvas_objects/document_block.dart';
 import '../../models/canvas_objects/connector.dart';
 import '../../models/canvas_objects/canvas_text.dart';
 import '../../models/canvas_objects/canvas_comment.dart';
+import '../../models/canvas_objects/freehand_path.dart';
 import '../../models/documents/document_content.dart';
+import '../../services/shape_recognition_service.dart';
 import 'canvas_persistence_service.dart';
 import 'canvas_tools_service.dart';
 import 'canvas_connector_service.dart';
@@ -35,6 +37,7 @@ class CanvasService extends ChangeNotifier {
   void Function(DocumentBlock)? onOpenDocumentEditor;
   void Function(CanvasText)? onStartEditingText;
   void Function(CanvasComment)? onStartEditingComment;
+  void Function(ShapeRecognitionResult, FreehandPath)? onShowShapeConversionDialog;
 
   // Core state
   ToolType _currentTool = ToolType.select;
@@ -83,6 +86,9 @@ class CanvasService extends ChangeNotifier {
     _documentService.onDocumentChanged = () => notifyListeners();
     _toolsService.onStartEditingText = onStartEditingText;
     _toolsService.onStartEditingComment = onStartEditingComment;
+    _toolsService.onShowShapeConversionDialog = (result, path) {
+      onShowShapeConversionDialog?.call(result, path);
+    };
 
     // Respect global flag for tests
     _autoSaveEnabled = globalAutoSaveEnabled;
@@ -253,6 +259,17 @@ class CanvasService extends ChangeNotifier {
 
   void cancelFreehandConnection() {
     _connectorService.cancelFreehandConnection();
+  }
+
+  // Shape recognition methods
+  void acceptShapeConversion() {
+    _toolsService.acceptShapeConversion();
+    notifyListeners();
+  }
+
+  void rejectShapeConversion() {
+    _toolsService.rejectShapeConversion();
+    notifyListeners();
   }
 
   // Persistence

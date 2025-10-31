@@ -12,6 +12,9 @@ import '../domain/canvas_domain.dart';
 import '../models/documents/document_content.dart';
 import '../models/documents/block_types.dart';
 import '../utils/logger.dart';
+import '../widgets/shape_conversion_dialog.dart';
+import '../services/shape_recognition_service.dart';
+import '../models/canvas_objects/freehand_path.dart';
 import 'canvas_widgets.dart';
 import 'canvas_painter.dart';
 import 'document_editor_overlay.dart';
@@ -49,6 +52,7 @@ class _CanvasScreenState extends State<CanvasScreen> {
     _service.onOpenDocumentEditor = _openDocumentEditor;
     _service.onStartEditingText = _startInlineTextEditing;
     _service.onStartEditingComment = _showCommentEditingDialog;
+    _service.onShowShapeConversionDialog = _showShapeConversionDialog;
 
     _focusNode.requestFocus(); // Enable keyboard focus for backspace deletion
 
@@ -629,6 +633,27 @@ class _CanvasScreenState extends State<CanvasScreen> {
             ],
           );
         },
+        );
+      },
+    );
+  }
+
+  void _showShapeConversionDialog(ShapeRecognitionResult result, FreehandPath originalPath) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) {
+        return ShapeConversionDialog(
+          recognitionResult: result,
+          originalPath: originalPath,
+          onAccept: () {
+            Navigator.pop(context);
+            _service.acceptShapeConversion();
+          },
+          onReject: () {
+            Navigator.pop(context);
+            _service.rejectShapeConversion();
+          },
         );
       },
     );

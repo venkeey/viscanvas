@@ -4,7 +4,7 @@ import 'canvas_object.dart';
 import '../../domain/canvas_domain.dart';
 
 class CanvasTriangle extends CanvasObject {
-  Size size;
+  List<Offset> vertices; // 3 vertices: [top, bottomLeft, bottomRight] - relative to worldPosition
 
   CanvasTriangle({
     required super.id,
@@ -13,62 +13,51 @@ class CanvasTriangle extends CanvasObject {
     super.fillColor,
     super.strokeWidth,
     super.isSelected,
-    required this.size,
-  });
-
-  // Calculate triangle points from position and size
-  // Creates an equilateral-like triangle (pointing up)
-  Offset get point1 => Offset(worldPosition.dx + size.width / 2, worldPosition.dy); // Top
-  Offset get point2 => Offset(worldPosition.dx, worldPosition.dy + size.height); // Bottom left
-  Offset get point3 => Offset(worldPosition.dx + size.width, worldPosition.dy + size.height); // Bottom right
+    required this.vertices,
+  }) {
+    // Ensure we have exactly 3 vertices
+    if (vertices.length != 3) {
+      throw ArgumentError('CanvasTriangle must have exactly 3 vertices');
+    }
+  }
 
   @override
-  Rect calculateBoundingRect() =>
-      Rect.fromLTWH(worldPosition.dx, worldPosition.dy, size.width, size.height);
+  Rect calculateBoundingRect() {
+    if (vertices.length != 3) return Rect.zero;
+
+    final worldVertices = vertices.map((v) => worldPosition + v).toList();
+    
+    double minX = worldVertices[0].dx;
+    double minY = worldVertices[0].dy;
+    double maxX = worldVertices[0].dx;
+    double maxY = worldVertices[0].dy;
+
+    for (final vertex in worldVertices) {
+      minX = min(minX, vertex.dx);
+      minY = min(minY, vertex.dy);
+      maxX = max(maxX, vertex.dx);
+      maxY = max(maxY, vertex.dy);
+    }
+
+    return Rect.fromLTRB(minX, minY, maxX, maxY);
+  }
 
   @override
   bool hitTest(Offset worldPoint) {
-    // Use point-in-triangle test for accurate hit detection
-    final p1 = point1;
-    final p2 = point2;
-    final p3 = point3;
-    
-    // Barycentric coordinate method for point-in-triangle test
-    final v0 = p3 - p1;
-    final v1 = p2 - p1;
-    final v2 = worldPoint - p1;
-    
-    // Dot product helper
-    double dot(Offset a, Offset b) => a.dx * b.dx + a.dy * b.dy;
-    
-    final dot00 = dot(v0, v0);
-    final dot01 = dot(v0, v1);
-    final dot02 = dot(v0, v2);
-    final dot11 = dot(v1, v1);
-    final dot12 = dot(v1, v2);
-    
-    final invDenom = 1 / (dot00 * dot11 - dot01 * dot01);
-    final u = (dot11 * dot02 - dot01 * dot12) * invDenom;
-    final v = (dot00 * dot12 - dot01 * dot02) * invDenom;
-    
     // Inflate bounds for easier hit detection
     final bounds = getBoundingRect();
     final inflatedBounds = bounds.inflate(16);
-    
-    // Check if point is in triangle OR in inflated bounding box
-    return (u >= -0.1 && v >= -0.1 && u + v < 1.1) || inflatedBounds.contains(worldPoint);
+    return inflatedBounds.contains(worldPoint);
   }
 
   @override
   void draw(Canvas canvas, Matrix4 worldToScreen) {
-    final p1 = point1;
-    final p2 = point2;
-    final p3 = point3;
-    
+    if (vertices.length != 3) return;
+
     final path = Path()
-      ..moveTo(p1.dx, p1.dy)
-      ..lineTo(p2.dx, p2.dy)
-      ..lineTo(p3.dx, p3.dy)
+      ..moveTo((worldPosition + vertices[0]).dx, (worldPosition + vertices[0]).dy)
+      ..lineTo((worldPosition + vertices[1]).dx, (worldPosition + vertices[1]).dy)
+      ..lineTo((worldPosition + vertices[2]).dx, (worldPosition + vertices[2]).dy)
       ..close();
 
     if (fillColor != null && fillColor != Colors.transparent) {
@@ -92,34 +81,53 @@ class CanvasTriangle extends CanvasObject {
 
   @override
   void resize(ResizeHandle handle, Offset delta, Offset initialWorldPosition, Rect initialBounds) {
-    double newX = initialBounds.left, newY = initialBounds.top;
-    double newWidth = initialBounds.width, newHeight = initialBounds.height;
+    if (vertices.length != 3) return;
+
+    double newX = initialBounds.left;
+    double newY = initialBounds.top;
+    double newWidth = initialBounds.width;
+    double newHeight = initialBounds.height;
+
+    // Calculate scale factors
+    final originalWidth = initialBounds.width;
+    final originalHeight = initialBounds.height;
+    
+    if (originalWidth == 0 || originalHeight == 0) return;
 
     switch (handle) {
       case ResizeHandle.topLeft:
-        newX += delta.dx; newY += delta.dy;
-        newWidth -= delta.dx; newHeight -= delta.dy;
+        newX += delta.dx;
+        newY += delta.dy;
+        newWidth -= delta.dx;
+        newHeight -= delta.dy;
         break;
       case ResizeHandle.topCenter:
-        newY += delta.dy; newHeight -= delta.dy;
+        newY += delta.dy;
+        newHeight -= delta.dy;
         break;
       case ResizeHandle.topRight:
-        newY += delta.dy; newWidth += delta.dx; newHeight -= delta.dy;
+        newY += delta.dy;
+        newWidth += delta.dx;
+        newHeight -= delta.dy;
         break;
       case ResizeHandle.centerLeft:
-        newX += delta.dx; newWidth -= delta.dx;
+        newX += delta.dx;
+        newWidth -= delta.dx;
         break;
       case ResizeHandle.centerRight:
         newWidth += delta.dx;
         break;
       case ResizeHandle.bottomLeft:
-        newX += delta.dx; newWidth -= delta.dx; newHeight += delta.dy;
+        newX += delta.dx;
+        newWidth -= delta.dx;
+        newHeight += delta.dy;
         break;
       case ResizeHandle.bottomCenter:
         newHeight += delta.dy;
         break;
       case ResizeHandle.bottomRight:
-        newWidth += delta.dx; newHeight += delta.dy;
+        newWidth += delta.dx;
+        newHeight += delta.dy;
         break;
       case ResizeHandle.none:
         return;
@@ -127,8 +135,25 @@ class CanvasTriangle extends CanvasObject {
         return;
     }
 
+    // Apply minimum size constraints
+    newWidth = max(10.0, newWidth);
+    newHeight = max(10.0, newHeight);
+
+    final scaleX = newWidth / originalWidth;
+    final scaleY = newHeight / originalHeight;
+
+    // Scale vertices relative to their original position
+    final originalCenter = initialBounds.center;
+    
+    vertices = vertices.map((v) {
+      final originalWorldVertex = initialWorldPosition + v;
+      final relativeToCenter = originalWorldVertex - originalCenter;
+      final scaled = Offset(relativeToCenter.dx * scaleX, relativeToCenter.dy * scaleY);
+      final newWorldVertex = originalCenter + scaled;
+      return newWorldVertex - Offset(newX, newY); // Convert back to relative
+    }).toList();
+
     worldPosition = Offset(newX, newY);
-    size = Size(max(20.0, newWidth), max(20.0, newHeight));
     invalidateCache();
   }
 
@@ -140,8 +165,8 @@ class CanvasTriangle extends CanvasObject {
       strokeColor: strokeColor,
       fillColor: fillColor,
       strokeWidth: strokeWidth,
-      size: size,
+      isSelected: false,
+      vertices: List.from(vertices),
     );
   }
 }
-

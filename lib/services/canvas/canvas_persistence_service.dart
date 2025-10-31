@@ -10,6 +10,7 @@ import '../../models/canvas_objects/canvas_object.dart';
 import '../../models/canvas_objects/freehand_path.dart';
 import '../../models/canvas_objects/canvas_rectangle.dart';
 import '../../models/canvas_objects/canvas_circle.dart';
+import '../../models/canvas_objects/canvas_triangle.dart';
 import '../../models/canvas_objects/sticky_note.dart';
 import '../../models/canvas_objects/document_block.dart';
 import '../../models/canvas_objects/connector.dart';
@@ -243,6 +244,7 @@ class CanvasPersistenceService {
       if (obj is FreehandPath) 'points': obj.points.map((p) => {'dx': p.dx, 'dy': p.dy}).toList(),
       if (obj is CanvasRectangle) 'size': {'width': obj.size.width, 'height': obj.size.height},
       if (obj is CanvasCircle) 'radius': obj.radius,
+      if (obj is CanvasTriangle) 'vertices': obj.vertices.map((v) => {'dx': v.dx, 'dy': v.dy}).toList(),
       if (obj is StickyNote) ...{
         'text': obj.text,
         'size': {'width': obj.size.width, 'height': obj.size.height},
@@ -335,6 +337,28 @@ class CanvasPersistenceService {
           strokeWidth: json['strokeWidth'],
           isSelected: json['isSelected'] ?? false,
           radius: json['radius'],
+        );
+      case 'CanvasTriangle':
+        // Handle null vertices (for backward compatibility)
+        List<Offset> vertices;
+        if (json['vertices'] != null && json['vertices'] is List) {
+          vertices = (json['vertices'] as List).map((v) => Offset(v['dx'], v['dy'])).toList();
+        } else {
+          // Default triangle if vertices are missing
+          vertices = [
+            const Offset(0, 0), // Top
+            const Offset(-25, 50), // Bottom left
+            const Offset(25, 50), // Bottom right
+          ];
+        }
+        return CanvasTriangle(
+          id: json['id'],
+          worldPosition: Offset(json['worldPosition']['dx'], json['worldPosition']['dy']),
+          strokeColor: Color(json['strokeColor']),
+          fillColor: json['fillColor'] != null ? Color(json['fillColor']) : Colors.transparent,
+          strokeWidth: json['strokeWidth'],
+          isSelected: json['isSelected'] ?? false,
+          vertices: vertices,
         );
       case 'StickyNote':
         return StickyNote(

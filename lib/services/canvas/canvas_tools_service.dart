@@ -14,6 +14,7 @@ import '../../models/canvas_objects/connector.dart';
 import '../../models/canvas_objects/canvas_text.dart';
 import '../../models/canvas_objects/canvas_comment.dart';
 import '../../utils/logger.dart';
+import '../../services/shape_recognition_service.dart';
 import 'canvas_connector_service.dart';
 
 class CanvasToolsService {
@@ -22,6 +23,7 @@ class CanvasToolsService {
   final SelectObjectUseCase _selectObjectUseCase;
   final HitTestUseCase _hitTestUseCase;
   final CanvasConnectorService _connectorService;
+  final ShapeRecognitionService _shapeRecognitionService = ShapeRecognitionService();
 
   // Callbacks
   void Function(ToolType)? onToolChanged;
@@ -50,6 +52,13 @@ class CanvasToolsService {
   // Callbacks for editing
   void Function(CanvasText)? onStartEditingText;
   void Function(CanvasComment)? onStartEditingComment;
+
+  // Shape recognition state
+  ShapeRecognitionResult? _pendingRecognitionResult;
+  FreehandPath? _pendingFreehandPath;
+  
+  // Callback for showing shape conversion dialog
+  void Function(ShapeRecognitionResult, FreehandPath)? onShowShapeConversionDialog;
 
   CanvasToolsService(
     this._repository,
@@ -306,6 +315,18 @@ class CanvasToolsService {
 
     // Commit temporary object to repository if it exists
     if (_tempObject != null) {
+      // Special handling for freehand paths - run shape recognition
+      if (_tempObject is FreehandPath) {
+        final freehandPath = _tempObject as FreehandPath;
+        
+        // Only recognize if path has enough points
+        if (freehandPath.points.length >= ShapeRecognitionService.MIN_POINTS_FOR_RECOGNITION) {
+          // Run recognition (synchronously for now - can be made async later)
+          _runShapeRecognition(freehandPath);
+          return; // Exit early - recognition will handle creation or dialog
+        }
+      }
+      
       final createdObject = _tempObject!;
       _commandHistory.execute(CreateObjectCommand(_repository, createdObject));
       
@@ -533,13 +554,20 @@ class CanvasToolsService {
           radius: 25, // Start with reasonable minimum radius
         );
       case ToolType.triangle:
+        // Create triangle with default vertices (pointing up)
+        final defaultSize = 50.0;
+        final vertices = [
+          Offset(0, 0), // Top
+          Offset(-defaultSize / 2, defaultSize), // Bottom left
+          Offset(defaultSize / 2, defaultSize), // Bottom right
+        ];
         return CanvasTriangle(
           id: id,
           worldPosition: worldPoint,
           strokeColor: strokeColor,
           fillColor: fillColor,
           strokeWidth: strokeWidth,
-          size: const Size(50, 50), // Start with reasonable minimum size
+          vertices: vertices,
         );
       case ToolType.sticky_note:
         return StickyNote(
@@ -642,16 +670,17 @@ class CanvasToolsService {
       final minY = min(_dragStart!.dy, worldPoint.dy);
       final maxY = max(_dragStart!.dy, worldPoint.dy);
       
-      final width = maxX - minX;
-      final height = maxY - minY;
+      final width = max(20.0, maxX - minX); // Minimum width of 20px
+      final height = max(20.0, maxY - minY); // Minimum height of 20px
       
       // Update position to top-left of bounding box
       (_tempObject as CanvasTriangle).worldPosition = Offset(minX, minY);
-      // Update size with minimum constraints
-      (_tempObject as CanvasTriangle).size = Size(
-        max(20.0, width), // Minimum width of 20px
-        max(20.0, height)  // Minimum height of 20px
-      );
+      // Update vertices to fit the bounding box (triangle pointing up)
+      (_tempObject as CanvasTriangle).vertices = [
+        Offset(width / 2, 0), // Top center
+        Offset(0, height), // Bottom left
+        Offset(width, height), // Bottom right
+      ];
     } else if (_tempObject is StickyNote) {
       // Calculate bounding box from drag start to current point
       final minX = min(_dragStart!.dx, worldPoint.dx);
@@ -862,6 +891,184 @@ class CanvasToolsService {
       
       default:
         return SystemMouseCursors.basic;
+    }
+  }
+
+  // ===== SHAPE RECOGNITION METHODS =====
+
+  void _runShapeRecognition(FreehandPath freehandPath) {
+    // Convert relative points to world points
+    final worldPoints = freehandPath.points.map((p) => freehandPath.worldPosition + p).toList();
+    
+    // Run recognition
+    final result = _shapeRecognitionService.recognizeShape(worldPoints);
+    
+    if (result.type != RecognizedShape.unknown &&
+        result.confidence >= ShapeRecognitionService.DEFAULT_CONFIDENCE_THRESHOLD) {
+      // Store recognition result for dialog
+      _pendingRecognitionResult = result;
+      _pendingFreehandPath = freehandPath;
+      
+      // Notify UI to show dialog
+      onShowShapeConversionDialog?.call(result, freehandPath);
+    } else {
+      // No shape detected, create freehand path normally
+      _commandHistory.execute(CreateObjectCommand(_repository, freehandPath));
+      _tempObject = null;
+      onToolChanged?.call(ToolType.select);
+      onObjectCreated?.call();
+      CanvasLogger.canvasService('No shape detected, creating freehand path');
+    }
+  }
+
+  void acceptShapeConversion() {
+    if (_pendingRecognitionResult == null || _pendingFreehandPath == null) {
+      return;
+    }
+    
+    final recognizedShape = _fitShapeToPoints(
+      _pendingRecognitionResult!.type,
+      _pendingFreehandPath!.points,
+      _pendingFreehandPath!.worldPosition,
+      _pendingFreehandPath!.strokeColor,
+      _pendingFreehandPath!.fillColor,
+      _pendingFreehandPath!.strokeWidth,
+    );
+    
+    if (recognizedShape != null) {
+      _tempObject = null;
+      _commandHistory.execute(CreateObjectCommand(_repository, recognizedShape));
+      _clearPendingRecognition();
+      
+      onToolChanged?.call(ToolType.select);
+      onObjectCreated?.call();
+      CanvasLogger.canvasService('Converted freehand path to ${recognizedShape.runtimeType}');
+    }
+  }
+
+  void rejectShapeConversion() {
+    if (_pendingFreehandPath != null) {
+      _commandHistory.execute(CreateObjectCommand(_repository, _pendingFreehandPath!));
+      _tempObject = null;
+      _clearPendingRecognition();
+      
+      onToolChanged?.call(ToolType.select);
+      onObjectCreated?.call();
+      CanvasLogger.canvasService('Kept original freehand path');
+    } else {
+      _clearPendingRecognition();
+    }
+  }
+
+  void _clearPendingRecognition() {
+    _pendingRecognitionResult = null;
+    _pendingFreehandPath = null;
+  }
+
+  CanvasObject? _fitShapeToPoints(
+    RecognizedShape shapeType,
+    List<Offset> points,
+    Offset basePosition,
+    Color strokeColor,
+    Color? fillColor,
+    double strokeWidth,
+  ) {
+    final id = DateTime.now().millisecondsSinceEpoch.toString();
+
+    switch (shapeType) {
+      case RecognizedShape.circle:
+        if (_pendingRecognitionResult?.center != null && _pendingRecognitionResult?.radius != null) {
+          final center = _pendingRecognitionResult!.center!;
+          final radius = _pendingRecognitionResult!.radius!;
+          
+          return CanvasCircle(
+            id: id,
+            worldPosition: Offset(center.dx - radius, center.dy - radius),
+            strokeColor: strokeColor,
+            fillColor: fillColor,
+            strokeWidth: strokeWidth,
+            radius: radius,
+          );
+        }
+        // Fallback: calculate from freehand path bounds
+        final freehandBounds = _pendingFreehandPath?.calculateBoundingRect();
+        if (freehandBounds != null && !freehandBounds.isEmpty) {
+          final radius = min(freehandBounds.width, freehandBounds.height) / 2;
+          return CanvasCircle(
+            id: id,
+            worldPosition: Offset(freehandBounds.center.dx - radius, freehandBounds.center.dy - radius),
+            strokeColor: strokeColor,
+            fillColor: fillColor,
+            strokeWidth: strokeWidth,
+            radius: radius,
+          );
+        }
+        return null;
+
+      case RecognizedShape.rectangle:
+        // Use the recognized bounds if available, otherwise fallback to freehand path bounds
+        Rect? bounds = _pendingRecognitionResult?.bounds;
+        if (bounds == null || bounds.isEmpty) {
+          bounds = _pendingFreehandPath?.calculateBoundingRect();
+        }
+        
+        if (bounds != null && !bounds.isEmpty) {
+          return CanvasRectangle(
+            id: id,
+            worldPosition: bounds.topLeft,
+            strokeColor: strokeColor,
+            fillColor: fillColor,
+            strokeWidth: strokeWidth,
+            size: bounds.size,
+          );
+        }
+        return null;
+
+      case RecognizedShape.triangle:
+        if (_pendingRecognitionResult?.vertices != null && _pendingRecognitionResult!.vertices!.length == 3) {
+          final worldVertices = _pendingRecognitionResult!.vertices!;
+          // Calculate bounding box to find the top-left corner for worldPosition
+          double minX = worldVertices[0].dx;
+          double minY = worldVertices[0].dy;
+          for (final v in worldVertices) {
+            minX = min(minX, v.dx);
+            minY = min(minY, v.dy);
+          }
+          final triangleBase = Offset(minX, minY);
+          
+          // Convert to relative vertices
+          final relativeVertices = worldVertices.map((v) => v - triangleBase).toList();
+          
+          return CanvasTriangle(
+            id: id,
+            worldPosition: triangleBase,
+            strokeColor: strokeColor,
+            fillColor: fillColor,
+            strokeWidth: strokeWidth,
+            vertices: relativeVertices,
+          );
+        }
+        // Fallback: create triangle from freehand path bounds
+        final freehandBounds = _pendingFreehandPath?.calculateBoundingRect();
+        if (freehandBounds != null && !freehandBounds.isEmpty) {
+          final vertices = [
+            Offset(0, 0), // Top center (relative)
+            Offset(-freehandBounds.width / 2, freehandBounds.height), // Bottom left (relative)
+            Offset(freehandBounds.width / 2, freehandBounds.height), // Bottom right (relative)
+          ];
+          return CanvasTriangle(
+            id: id,
+            worldPosition: Offset(freehandBounds.left, freehandBounds.top),
+            strokeColor: strokeColor,
+            fillColor: fillColor,
+            strokeWidth: strokeWidth,
+            vertices: vertices,
+          );
+        }
+        return null;
+
+      case RecognizedShape.unknown:
+        return null;
     }
   }
 
