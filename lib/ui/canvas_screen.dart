@@ -4,6 +4,7 @@ import '../services/canvas/canvas_service.dart';
 import '../widgets/miro_sidebar.dart';
 import '../widgets/shapes_panel.dart';
 import '../models/canvas_objects/sticky_note.dart';
+import '../models/canvas_objects/canvas_object.dart';
 import '../models/canvas_objects/document_block.dart';
 import '../domain/canvas_domain.dart';
 import '../models/documents/document_content.dart';
@@ -30,6 +31,9 @@ class _CanvasScreenState extends State<CanvasScreen> {
   String? _selectedShape;
   bool _showShapesPanel = false;
 
+  // Public getter for testing
+  CanvasService get service => _service;
+
   @override
   void initState() {
     super.initState();
@@ -52,6 +56,18 @@ class _CanvasScreenState extends State<CanvasScreen> {
     print('🔍 HardwareKeyboard state - Ctrl: ${HardwareKeyboard.instance.isControlPressed}, Shift: ${HardwareKeyboard.instance.isShiftPressed}');
 
     if (event is KeyDownEvent) {
+      // Test-friendly shortcut: Ctrl+Shift+Delete clears the canvas
+      if (HardwareKeyboard.instance.isControlPressed && HardwareKeyboard.instance.isShiftPressed &&
+          (event.logicalKey == LogicalKeyboardKey.delete || event.logicalKey == LogicalKeyboardKey.backspace)) {
+        _service.deleteAll();
+        return;
+      }
+      // Test-friendly shortcut: Ctrl+Shift+5 sets zoom to 50%
+      if (HardwareKeyboard.instance.isControlPressed && HardwareKeyboard.instance.isShiftPressed &&
+          event.logicalKey == LogicalKeyboardKey.digit5) {
+        _service.updateTransform(_service.transform.translation, 0.5);
+        return;
+      }
       if (event.logicalKey == LogicalKeyboardKey.delete || event.logicalKey == LogicalKeyboardKey.backspace) {
         _service.deleteSelected();
       } else if (event.logicalKey == LogicalKeyboardKey.escape) {
@@ -65,6 +81,12 @@ class _CanvasScreenState extends State<CanvasScreen> {
         _service.setTool(ToolType.select);
       } else if (event.logicalKey == LogicalKeyboardKey.keyB) {
         _service.setTool(ToolType.pen);
+      } else if (event.logicalKey == LogicalKeyboardKey.keyC) {
+        _service.setTool(ToolType.connector);
+      } else if (event.logicalKey == LogicalKeyboardKey.keyR) {
+        _service.setTool(ToolType.rectangle);
+      } else if (event.logicalKey == LogicalKeyboardKey.keyO) {
+        _service.setTool(ToolType.circle);
       } else if (event.logicalKey == LogicalKeyboardKey.keyD) {
         _service.setTool(ToolType.document_block);
       } else if (HardwareKeyboard.instance.isControlPressed) {
@@ -392,6 +414,15 @@ class _CanvasScreenState extends State<CanvasScreen> {
                       // Main Canvas
                       Positioned.fill(
                         child: GestureDetector(
+                          key: const Key('canvasRoot'),
+                          onSecondaryTapDown: (details) {
+                            // Right-click: select object under cursor (if any) and open properties
+                            _service.onTap(details.localPosition);
+                            final selected = _service.objects.where((o) => o.isSelected).toList();
+                            if (selected.isNotEmpty) {
+                              _openObjectPropertiesPopup(selected.first);
+                            }
+                          },
                           onTapDown: (details) {
                             _service.onTap(details.localPosition);
                             _handleCanvasTap();
@@ -445,6 +476,7 @@ class _CanvasScreenState extends State<CanvasScreen> {
                             ],
                           ),
                           child: TextButton.icon(
+                            key: const Key('notionDemoButton'),
                             onPressed: () {
                               Navigator.pushNamed(context, '/notion-demo');
                             },
@@ -547,5 +579,152 @@ class _CanvasScreenState extends State<CanvasScreen> {
       default:
         return null;
     }
+  }
+
+  void _openObjectPropertiesPopup(CanvasObject obj) {
+    // Compute default display name same as Objects panel
+    final typeName = obj.getDisplayTypeName();
+    final sameType = _service.objects.where((o) => o.runtimeType == obj.runtimeType).toList();
+    final index = sameType.indexOf(obj) + 1;
+    final defaultName = obj.label ?? '$typeName #$index';
+    final nameController = TextEditingController(text: defaultName);
+    double tempStrokeWidth = obj.strokeWidth;
+    Color tempStroke = obj.strokeColor;
+    Color? tempFill = obj.fillColor;
+
+    // Sticky note specifics (dynamic to avoid tight coupling)
+    final isSticky = obj is StickyNote;
+    final sticky = isSticky ? obj as StickyNote : null;
+    final stickyTextController = isSticky ? TextEditingController(text: sticky!.text) : null;
+    Color? stickyBg = isSticky ? sticky!.backgroundColor : null;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Properties'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Name'),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(
+                        hintText: 'Enter a display name',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      onChanged: (v) => _service.setObjectLabel(obj.id, v),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('Stroke Color'),
+                    const SizedBox(height: 6),
+                    _buildColorRow(tempStroke, (c) {
+                      setState(() => tempStroke = c);
+                      _service.setStrokeColor(c);
+                    }),
+                    const SizedBox(height: 12),
+                    const Text('Fill Color'),
+                    const SizedBox(height: 6),
+                    _buildColorRow(tempFill ?? Colors.transparent, (c) {
+                      setState(() => tempFill = c);
+                      _service.setFillColor(c);
+                    }, includeTransparent: true),
+                    const SizedBox(height: 12),
+                    const Text('Stroke Width'),
+                    Slider(
+                      value: tempStrokeWidth,
+                      min: 1,
+                      max: 20,
+                      divisions: 19,
+                      label: tempStrokeWidth.toStringAsFixed(0),
+                      onChanged: (v) {
+                        setState(() => tempStrokeWidth = v);
+                        _service.setStrokeWidth(v);
+                      },
+                    ),
+                    if (isSticky) ...[
+                      const SizedBox(height: 12),
+                      const Text('Sticky Note Text'),
+                      TextField(
+                        controller: stickyTextController,
+                        maxLines: null,
+                        onChanged: (v) => _service.updateStickyNoteText(v),
+                      ),
+                      const SizedBox(height: 12),
+                      const Text('Sticky Note Color'),
+                      _buildColorRow(stickyBg ?? Colors.yellow, (c) {
+                        setState(() => stickyBg = c);
+                        _service.setStickyNoteBackgroundColor(c);
+                      }),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () async {
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Delete object?'),
+                        content: const Text('This action cannot be undone.'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
+                        ],
+                      ),
+                    );
+                    if (confirm == true) {
+                      _service.selectObjectById(obj.id);
+                      _service.deleteSelected();
+                      if (context.mounted) Navigator.pop(context);
+                    }
+                  },
+                  child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Close'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildColorRow(Color current, ValueChanged<Color> onPick, {bool includeTransparent = false}) {
+    final colors = <Color>[
+      Colors.black, Colors.white, Colors.red, Colors.green,
+      Colors.blue, Colors.yellow, Colors.orange, Colors.purple,
+      Colors.pink, Colors.brown, Colors.grey,
+      if (includeTransparent) Colors.transparent,
+    ];
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: colors.map((c) {
+        final selected = c.value == current.value;
+        return GestureDetector(
+          onTap: () => onPick(c),
+          child: Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: c,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: selected ? Colors.blue : Colors.grey, width: selected ? 2 : 1),
+            ),
+          ),
+        );
+      }).toList(),
+    );
   }
 }

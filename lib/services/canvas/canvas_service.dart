@@ -15,6 +15,8 @@ import 'canvas_transform_service.dart';
 // ===== MAIN CANVAS SERVICE =====
 
 class CanvasService extends ChangeNotifier {
+  // Global switch to disable autosave and autosave loading during tests
+  static bool globalAutoSaveEnabled = true;
   late final InMemoryCanvasRepository _repository;
   late final CommandHistory _commandHistory;
   late final SelectObjectUseCase _selectObjectUseCase;
@@ -31,10 +33,7 @@ class CanvasService extends ChangeNotifier {
   void Function(DocumentBlock)? onOpenDocumentEditor;
 
   // Core state
-  ToolType _currentTool = ToolType.select;
-  Color _strokeColor = Colors.black;
-  Color _fillColor = Colors.transparent;
-  double _strokeWidth = 2.0;
+  ToolType _currentTool = ToolType
 
   // Auto-save state
   Timer? _autoSaveTimer;
@@ -76,11 +75,18 @@ class CanvasService extends ChangeNotifier {
     _documentService.onOpenDocumentEditor = onOpenDocumentEditor;
     _documentService.onDocumentChanged = () => notifyListeners();
 
+    // Respect global flag for tests
+    _autoSaveEnabled = globalAutoSaveEnabled;
+
     // Start auto-save timer (every 30 seconds)
-    _startAutoSave();
+    if (_autoSaveEnabled) {
+      _startAutoSave();
+    }
 
     // Try to load last autosaved canvas
-    _loadAutoSave();
+    if (_autoSaveEnabled) {
+      _loadAutoSave();
+    }
   }
 
   // ===== PUBLIC API =====
@@ -146,6 +152,29 @@ class CanvasService extends ChangeNotifier {
 
   void deleteSelected() {
     _toolsService.deleteSelected();
+    notifyListeners();
+  }
+
+  // Delete all objects on the canvas
+  void deleteAll() {
+    // Work on a copy to avoid concurrent modification
+    final all = List<CanvasObject>.from(objects);
+    for (final obj in all) {
+      // Select and delete each to ensure proper command history integration
+      _selectObjectUseCase.execute(obj.id, multiSelect: false);
+      _toolsService.deleteSelected();
+    }
+    notifyListeners();
+  }
+
+  // Rename / set a human-friendly label for an object
+  void setObjectLabel(String objectId, String? newLabel) {
+    for (var obj in objects) {
+      if (obj.id == objectId) {
+        obj.label = (newLabel == null || newLabel.trim().isEmpty) ? null : newLabel.trim();
+        break;
+      }
+    }
     notifyListeners();
   }
 

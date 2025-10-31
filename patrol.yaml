@@ -1,0 +1,20 @@
+app_name: viscanvas
+devices:
+  windows:
+    enabled: true
+    # Use the default connected Windows device
+timeouts:
+  app_start: 60s
+  find: 10s
+  settle: 10s
+  action: 10s
+permissions:
+  android: {}
+  ios: {}
+
+
+
+
+
+
+

@@ -6,6 +6,7 @@ class CollapsibleSection extends StatefulWidget {
   final bool initiallyExpanded;
   final EdgeInsets? padding;
   final EdgeInsets? margin;
+  final Widget? trailing; // optional action on the right side of header
 
   const CollapsibleSection({
     Key? key,
@@ -14,6 +15,7 @@ class CollapsibleSection extends StatefulWidget {
     this.initiallyExpanded = true,
     this.padding,
     this.margin,
+    this.trailing,
   }) : super(key: key);
 
   @override
@@ -65,6 +67,11 @@ class _CollapsibleSectionState extends State<CollapsibleSection> {
                       ),
                     ),
                   ),
+                  if (widget.trailing != null) ...[
+                    // Keep actions next to the collapse arrow
+                    widget.trailing!,
+                    const SizedBox(width: 4),
+                  ],
                   Icon(
                     _isExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
                     color: Colors.grey[600],

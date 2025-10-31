@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/canvas/canvas_service.dart';
 import '../models/canvas_objects/sticky_note.dart';
+import 'settings_screen.dart';
 import 'objects_list_panel.dart';
 import 'collapsible_section.dart';
 
@@ -36,6 +37,68 @@ class _DraggableRightPanelState extends State<DraggableRightPanel> {
 
     // Constrain width
     final constrainedWidth = _isCollapsed ? 50.0 : _width.clamp(200.0, 600.0);
+    // When collapsed, show only a small circular toggle that can be dragged
+    if (_isCollapsed) {
+      return Positioned(
+        top: _topOffset.clamp(0.0, screenHeight - 64),
+        right: _rightOffset.clamp(0.0, screenWidth - 48),
+        child: GestureDetector(
+          onPanStart: (details) {
+            setState(() {
+              _isDragging = true;
+              _initialTop = _topOffset;
+              _initialRight = _rightOffset;
+              _initialPanY = details.globalPosition.dy;
+              _initialPanX = details.globalPosition.dx;
+            });
+          },
+          onPanUpdate: (details) {
+            if (_isDragging) {
+              final deltaY = details.globalPosition.dy - _initialPanY;
+              final deltaX = _initialPanX - details.globalPosition.dx;
+              setState(() {
+                _topOffset = (_initialTop + deltaY).clamp(0.0, screenHeight - 64);
+                _rightOffset = (_initialRight + deltaX).clamp(0.0, screenWidth - 48);
+              });
+            }
+          },
+          onPanEnd: (_) {
+            setState(() {
+              _isDragging = false;
+            });
+          },
+          child: MouseRegion(
+            cursor: SystemMouseCursors.move,
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+                border: Border.all(color: Colors.grey.shade300, width: 1),
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.keyboard_arrow_left, size: 18),
+                onPressed: () {
+                  setState(() {
+                    _isCollapsed = false;
+                  });
+                },
+                tooltip: 'Expand Panel',
+                padding: EdgeInsets.zero,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
 
     return Positioned(
       top: _topOffset.clamp(0.0, screenHeight - 500), // Constrain with reasonable max
@@ -128,7 +191,6 @@ class _DraggableRightPanelState extends State<DraggableRightPanel> {
                               ),
                             )
                           : Row(
-                              mainAxisAlignment: MainAxisAlignment.start,
                               children: [
                                 // Collapse button
                                 IconButton(
@@ -139,6 +201,27 @@ class _DraggableRightPanelState extends State<DraggableRightPanel> {
                                     });
                                   },
                                   tooltip: 'Collapse Panel',
+                                  iconSize: 16,
+                                ),
+                                const Spacer(),
+                                // Save button (manual save)
+                                IconButton(
+                                  icon: const Icon(Icons.save),
+                                  tooltip: 'Save Canvas',
+                                  onPressed: () => _showSaveDialog(context),
+                                  iconSize: 16,
+                                ),
+                                // Settings button (top-right of handle)
+                                IconButton(
+                                  icon: const Icon(Icons.settings),
+                                  tooltip: 'Settings',
+                                  onPressed: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (context) => SettingsScreen(service: widget.service),
+                                      ),
+                                    );
+                                  },
                                   iconSize: 16,
                                 ),
                               ],
@@ -203,24 +286,45 @@ class _DraggableRightPanelState extends State<DraggableRightPanel> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               // Objects Section (moved to first)
-                              CollapsibleSection(
-                                title: 'Objects',
-                                child: SizedBox(
-                                  height: 200, // Fixed height for the objects list
-                                  child: ObjectsListPanel(service: widget.service),
-                                ),
+                            CollapsibleSection(
+                              title: 'Objects',
+                              trailing: IconButton(
+                                key: const Key('objectsDeleteAllButton'),
+                                icon: const Icon(Icons.delete_forever, color: Colors.redAccent),
+                                tooltip: 'Delete All Objects',
+                                onPressed: () async {
+                                  final confirm = await showDialog<bool>(
+                                    context: context,
+                                    builder: (context) => AlertDialog(
+                                      title: const Text('Delete all objects?'),
+                                      content: const Text('This will remove all objects from the canvas.'),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () => Navigator.pop(context, false),
+                                          child: const Text('Cancel'),
+                                        ),
+                                        TextButton(
+                                          onPressed: () => Navigator.pop(context, true),
+                                          child: const Text('Delete All', style: TextStyle(color: Colors.red)),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                  if (confirm == true) {
+                                    widget.service.deleteAll();
+                                  }
+                                },
                               ),
+                              child: SizedBox(
+                                height: 200, // Fixed height for the objects list
+                                child: ObjectsListPanel(service: widget.service),
+                              ),
+                            ),
                               
                               // Properties Section
                               CollapsibleSection(
                                 title: 'Properties',
                                 child: _buildPropertiesContent(),
-                              ),
-                              
-                              // Auto-save Section
-                              CollapsibleSection(
-                                title: 'Auto-save',
-                                child: _buildAutoSaveContent(),
                               ),
                             ],
                           ),
@@ -369,40 +473,7 @@ class _DraggableRightPanelState extends State<DraggableRightPanel> {
     );
   }
 
-  Widget _buildAutoSaveContent() {
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Column(
-        children: [
-          // Auto-save toggle
-          Row(
-            children: [
-              const Text('Auto-save: '),
-              Switch(
-                value: widget.service.isAutoSaveEnabled,
-                onChanged: (value) => widget.service.setAutoSaveEnabled(value),
-              ),
-            ],
-          ),
-          const Divider(),
-
-          // Save button
-          IconButton(
-            icon: const Icon(Icons.save),
-            onPressed: () => _showSaveDialog(context),
-            tooltip: 'Save Canvas',
-          ),
-
-          // Load button
-          IconButton(
-            icon: const Icon(Icons.folder_open),
-            onPressed: () => _showLoadDialog(context),
-            tooltip: 'Load Canvas',
-          ),
-        ],
-      ),
-    );
-  }
+  // Auto-save controls moved to Settings screen
 
   // Helper methods for sticky note detection
   bool _hasSelectedStickyNote(CanvasService service) {
@@ -497,12 +568,8 @@ class _DraggableRightPanelState extends State<DraggableRightPanel> {
     }
   }
 
-  // Load dialog method
-  Future<void> _showLoadDialog(BuildContext context) async {
-    // Load logic would go here
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Load functionality not implemented yet')),
-    );
-  }
+  // (Legacy) Load dialog method no longer used
+
+  // Removed old dialog-based settings opener; navigation handled in header button
 }
 

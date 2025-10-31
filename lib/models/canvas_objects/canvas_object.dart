@@ -17,6 +17,8 @@ abstract class CanvasObject {
   Color? fillColor;
   double strokeWidth;
   bool isSelected;
+  // Optional human-friendly label shown in UI lists
+  String? label;
   Rect? _cachedBoundingRect;
 
   CanvasObject({
@@ -26,6 +28,7 @@ abstract class CanvasObject {
     this.fillColor,
     this.strokeWidth = 2.0,
     this.isSelected = false,
+    this.label,
   });
 
   void invalidateCache() => _cachedBoundingRect = null;

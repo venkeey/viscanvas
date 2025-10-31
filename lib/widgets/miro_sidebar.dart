@@ -59,6 +59,7 @@ class _MiroSidebarState extends State<MiroSidebar> {
           
           // Select/Cursor (Blue highlighted) - using near_me icon for better E2E test compatibility
           _SidebarButton(
+            key: const Key('tool_select'),
             icon: Icons.near_me,
             isSelected: widget.selectedTool == 'select',
             isHighlighted: true,
@@ -131,6 +132,7 @@ class _MiroSidebarState extends State<MiroSidebar> {
 
           // Rectangle (direct access)
           _SidebarButton(
+            key: const Key('tool_rectangle'),
             icon: Icons.rectangle_outlined,
             isSelected: widget.selectedTool == 'rectangle',
             onTap: () => widget.onToolSelected('rectangle'),
@@ -141,6 +143,7 @@ class _MiroSidebarState extends State<MiroSidebar> {
 
           // Circle (direct access)
           _SidebarButton(
+            key: const Key('tool_circle'),
             icon: Icons.circle_outlined,
             isSelected: widget.selectedTool == 'circle',
             onTap: () => widget.onToolSelected('circle'),
@@ -161,6 +164,7 @@ class _MiroSidebarState extends State<MiroSidebar> {
 
           // Connector Tool - using timeline icon for better visual identification
           _SidebarButton(
+            key: const Key('tool_connector'),
             icon: Icons.timeline,
             isSelected: widget.selectedTool == 'connector',
             onTap: () => widget.onToolSelected('connector'),
@@ -249,6 +253,7 @@ class _SidebarButton extends StatelessWidget {
   final String tooltip;
 
   const _SidebarButton({
+    super.key,
     required this.icon,
     required this.isSelected,
     this.isHighlighted = false,
