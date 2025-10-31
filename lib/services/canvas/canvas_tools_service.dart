@@ -428,19 +428,52 @@ class CanvasToolsService {
     if (_tempObject is FreehandPath) {
       (_tempObject as FreehandPath).addPoint(delta);
     } else if (_tempObject is CanvasRectangle) {
+      // Calculate bounding box from drag start to current point
+      final minX = min(_dragStart!.dx, worldPoint.dx);
+      final maxX = max(_dragStart!.dx, worldPoint.dx);
+      final minY = min(_dragStart!.dy, worldPoint.dy);
+      final maxY = max(_dragStart!.dy, worldPoint.dy);
+      
+      final width = maxX - minX;
+      final height = maxY - minY;
+      
+      // Update position to top-left of bounding box
+      (_tempObject as CanvasRectangle).worldPosition = Offset(minX, minY);
+      // Update size with minimum constraints
       (_tempObject as CanvasRectangle).size = Size(
-        max(20.0, delta.dx.abs()), // Minimum width of 20px
-        max(20.0, delta.dy.abs())  // Minimum height of 20px
+        max(20.0, width), // Minimum width of 20px
+        max(20.0, height)  // Minimum height of 20px
       );
     } else if (_tempObject is CanvasCircle) {
+      // Calculate radius as distance from drag start (center) to current point
       final radius = sqrt(delta.dx * delta.dx + delta.dy * delta.dy);
-      (_tempObject as CanvasCircle).radius = max(10.0, radius); // Minimum radius of 10px
+      final actualRadius = max(10.0, radius); // Minimum radius of 10px
+      
+      // Update radius
+      (_tempObject as CanvasCircle).radius = actualRadius;
+      
+      // Adjust worldPosition: circle center should be at drag start
+      // worldPosition = center - Offset(radius, radius)
+      (_tempObject as CanvasCircle).worldPosition = _dragStart! - Offset(actualRadius, actualRadius);
     } else if (_tempObject is StickyNote) {
+      // Calculate bounding box from drag start to current point
+      final minX = min(_dragStart!.dx, worldPoint.dx);
+      final maxX = max(_dragStart!.dx, worldPoint.dx);
+      final minY = min(_dragStart!.dy, worldPoint.dy);
+      final maxY = max(_dragStart!.dy, worldPoint.dy);
+      
+      final width = maxX - minX;
+      final height = maxY - minY;
+      
+      // Update position to top-left of bounding box
+      (_tempObject as StickyNote).worldPosition = Offset(minX, minY);
+      // Update size with minimum constraints
       (_tempObject as StickyNote).size = Size(
-        max(100.0, delta.dx.abs()),
-        max(60.0, delta.dy.abs())
+        max(100.0, width),
+        max(60.0, height)
       );
     }
+    // Note: DocumentBlock size is final, so it cannot be resized during creation
   }
 
   ResizeHandle _getResizeHandle(CanvasObject obj, Offset screenPoint, Transform2D transform) {
