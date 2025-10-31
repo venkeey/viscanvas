@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:patrol/patrol.dart';
 import 'package:viscanvas/main.dart';
 import 'package:viscanvas/services/canvas/canvas_service.dart';
-import 'package:viscanvas/models/canvas_objects/canvas_object.dart';
 import 'package:viscanvas/models/canvas_objects/connector.dart';
 import 'package:viscanvas/ui/canvas_screen.dart';
 import 'package:viscanvas/domain/canvas_domain.dart';
@@ -378,6 +377,150 @@ void main() {
     print('✅ Created 2 different shapes (Rectangle and Circle)');
     print('✅ Connected them using the connector tool');
     print('✅ Verified all objects appear in the objects panel');
+
+    // Test: Drag rectangle and verify connector point moves
+    print('\n🔄 Testing drag rectangle with connector...');
+
+    // Step 1: Record initial positions
+    final rectangle = finalRectangles.first;
+    final connectorObj = finalConnectors.first as Connector;
+    
+    final initialRectPosition = rectangle.worldPosition;
+    final initialConnectorSourcePoint = connectorObj.sourcePoint;
+    
+    print('📍 Initial rectangle position: $initialRectPosition');
+    print('📍 Initial connector source point: $initialConnectorSourcePoint');
+
+    // Step 2: Select rectangle
+    // Select tool via toolbar button (more reliable than keyboard in tests)
+    await $(const Key('tool_select')).tap();
+    await $.pumpAndSettle();
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+
+    // Verify select tool is active
+    expect(service.currentTool, equals(ToolType.select),
+           reason: 'Select tool should be active');
+
+    // Get rectangle's bounding rect to find edge position for tapping (in world coordinates)
+    final rectBounds = rectangle.getBoundingRect();
+    
+    // Log rectangle bounds for debugging
+    print('📐 Rectangle bounds (world): left=${rectBounds.left}, top=${rectBounds.top}, right=${rectBounds.right}, bottom=${rectBounds.bottom}');
+    print('📐 Rectangle bounds: width=${rectBounds.width}, height=${rectBounds.height}');
+    print('📐 Rectangle center (world): ${rectBounds.center}');
+    print('📐 Rectangle worldPosition: ${rectangle.worldPosition}');
+    
+    // Tap on the left edge of the rectangle to select it (opposite side from connector which is on right)
+    // Use a point slightly inside the left edge to ensure we hit the rectangle
+    final rectEdgeWorld = Offset(rectBounds.left + 5, rectBounds.center.dy);
+    
+    // Get canvas transform to convert world coordinates to screen coordinates
+    final transform = service.transform;
+    print('🔧 Canvas transform: translation=${transform.translation}, scale=${transform.scale}');
+    
+    // Convert world coordinates to screen coordinates relative to canvas
+    final rectEdgeScreen = transform.worldToScreen(rectEdgeWorld);
+    
+    // Get canvas widget rect to adjust for sidebar offset (reuse existing canvasRect if available)
+    final Rect currentCanvasRect = $.tester.getRect(find.byKey(const Key('canvasRoot')));
+    print('📐 Canvas widget rect: left=${currentCanvasRect.left}, top=${currentCanvasRect.top}, width=${currentCanvasRect.width}, height=${currentCanvasRect.height}');
+    
+    // Convert to absolute screen coordinates (canvas coordinates + canvas position)
+    // The canvas transform screen coordinates are relative to canvas, so we need to add canvas position
+    final rectEdgeAbsoluteScreen = Offset(
+      currentCanvasRect.left + rectEdgeScreen.dx,
+      currentCanvasRect.top + rectEdgeScreen.dy,
+    );
+    
+    print('📍 Rectangle left edge (world): $rectEdgeWorld');
+    print('📍 Rectangle left edge (canvas-relative screen): $rectEdgeScreen');
+    print('📍 Rectangle left edge (absolute screen): $rectEdgeAbsoluteScreen');
+    print('📍 Converting back from screen to world: ${transform.screenToWorld(rectEdgeScreen)}');
+
+    // Tap on rectangle edge to select it (use absolute screen coordinates)
+    await $.tester.tapAt(rectEdgeAbsoluteScreen);
+    await $.pumpAndSettle();
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+
+    // Verify rectangle is selected
+    // Refresh rectangle from service to get updated selection state
+    final selectedRectangles = service.objects.where((obj) => obj.getDisplayTypeName() == 'Rectangle').toList();
+    final selectedRect = selectedRectangles.first;
+    expect(selectedRect.isSelected, isTrue, reason: 'Rectangle should be selected');
+
+    // Step 3: Drag rectangle to new position
+    // Calculate drag start point: vertical middle between center and top-left corner (to avoid resize handles)
+    final rectCenterWorld = rectBounds.center;
+    final topLeftWorld = Offset(rectBounds.left, rectBounds.top);
+    // Midpoint between center and top-left corner
+    final dragStartWorld = Offset(
+      (rectCenterWorld.dx + topLeftWorld.dx) / 2,
+      (rectCenterWorld.dy + topLeftWorld.dy) / 2,
+    );
+    
+    // Convert to screen coordinates (absolute)
+    final dragStartScreenRelative = transform.worldToScreen(dragStartWorld);
+    final dragStartScreen = Offset(
+      currentCanvasRect.left + dragStartScreenRelative.dx,
+      currentCanvasRect.top + dragStartScreenRelative.dy,
+    );
+    
+    // Calculate new position in world coordinates (move AWAY from circle - left and up)
+    final dragDelta = const Offset(-200, -100); // Move 200 left, 100 up (away from circle)
+    final newRectCenterWorld = dragStartWorld + dragDelta;  // Use dragStartWorld as base for accurate movement
+    
+    // Convert new position to screen coordinates (absolute)
+    final newRectCenterScreenRelative = transform.worldToScreen(newRectCenterWorld);
+    final newRectCenterScreen = Offset(
+      currentCanvasRect.left + newRectCenterScreenRelative.dx,
+      currentCanvasRect.top + newRectCenterScreenRelative.dy,
+    );
+    
+    print('🖱️ Dragging rectangle from midpoint (center-topLeft) $dragStartWorld (screen: $dragStartScreen) to $newRectCenterWorld (screen: $newRectCenterScreen)');
+    print('   Delta (world): $dragDelta');
+    print('   Center: $rectCenterWorld, TopLeft: $topLeftWorld, DragStart: $dragStartWorld');
+
+    // Perform drag from midpoint to new position (use absolute screen coordinates)
+    // Use 21 steps to account for initial snap/zero-move frame so total delta matches expected
+    await performMouseDrag($, dragStartScreen, newRectCenterScreen, steps: 21);
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+
+    // Step 4: Verify rectangle moved
+    // Refresh rectangle from service to get updated position
+    final updatedRectangles = service.objects.where((obj) => obj.getDisplayTypeName() == 'Rectangle').toList();
+    final updatedRect = updatedRectangles.first;
+    final newRectPosition = updatedRect.worldPosition;
+    
+    final actualDelta = newRectPosition - initialRectPosition;
+    print('📍 New rectangle position: $newRectPosition');
+    print('📍 Position delta: $actualDelta (expected ~$dragDelta)');
+
+    // Verify rectangle moved (allow tolerance for rounding and screen-to-world conversion)
+    // Note: Due to screen-to-world coordinate conversion rounding, actual delta may be slightly less
+    expect(actualDelta.dx, closeTo(dragDelta.dx, 10.0), reason: 'Rectangle should have moved horizontally');
+    expect(actualDelta.dy, closeTo(dragDelta.dy, 10.0), reason: 'Rectangle should have moved vertically');
+
+    // Step 5: Verify connector point moved
+    // Refresh connector from service to get updated source point
+    final updatedConnectors = service.objects.where((obj) => obj is Connector).cast<Connector>().toList();
+    final updatedConnector = updatedConnectors.first;
+    final newConnectorSourcePoint = updatedConnector.sourcePoint;
+    
+    final connectorPointDelta = newConnectorSourcePoint - initialConnectorSourcePoint;
+    print('📍 New connector source point: $newConnectorSourcePoint');
+    print('📍 Connector point delta: $connectorPointDelta (expected ~$dragDelta)');
+
+    // Verify connector source point moved by approximately the same delta
+    // The connector point should recalculate based on the new rectangle position
+    // Allow some tolerance as the point position is calculated based on edge detection
+    expect(connectorPointDelta.dx, closeTo(dragDelta.dx, 10.0), 
+           reason: 'Connector source point should have moved horizontally with rectangle');
+    expect(connectorPointDelta.dy, closeTo(dragDelta.dy, 10.0), 
+           reason: 'Connector source point should have moved vertically with rectangle');
+
+    print('✅ Rectangle drag test completed successfully!');
+    print('✅ Rectangle moved to new position');
+    print('✅ Connector source point moved with rectangle');
 
     // Final small pause for visual confirmation
     await Future<void>.delayed(const Duration(seconds: 2));
