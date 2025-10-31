@@ -410,20 +410,18 @@ void main() {
     print('📐 Rectangle center (world): ${rectBounds.center}');
     print('📐 Rectangle worldPosition: ${rectangle.worldPosition}');
     
+    // Get canvas transform and widget rect for coordinate conversion
+    final transform = service.transform;
+    final currentCanvasRect = $.tester.getRect(find.byKey(const Key('canvasRoot')));
+    print('🔧 Canvas transform: translation=${transform.translation}, scale=${transform.scale}');
+    print('📐 Canvas widget rect: left=${currentCanvasRect.left}, top=${currentCanvasRect.top}, width=${currentCanvasRect.width}, height=${currentCanvasRect.height}');
+    
     // Tap on the left edge of the rectangle to select it (opposite side from connector which is on right)
     // Use a point slightly inside the left edge to ensure we hit the rectangle
     final rectEdgeWorld = Offset(rectBounds.left + 5, rectBounds.center.dy);
     
-    // Get canvas transform to convert world coordinates to screen coordinates
-    final transform = service.transform;
-    print('🔧 Canvas transform: translation=${transform.translation}, scale=${transform.scale}');
-    
     // Convert world coordinates to screen coordinates relative to canvas
     final rectEdgeScreen = transform.worldToScreen(rectEdgeWorld);
-    
-    // Get canvas widget rect to adjust for sidebar offset (reuse existing canvasRect if available)
-    final Rect currentCanvasRect = $.tester.getRect(find.byKey(const Key('canvasRoot')));
-    print('📐 Canvas widget rect: left=${currentCanvasRect.left}, top=${currentCanvasRect.top}, width=${currentCanvasRect.width}, height=${currentCanvasRect.height}');
     
     // Convert to absolute screen coordinates (canvas coordinates + canvas position)
     // The canvas transform screen coordinates are relative to canvas, so we need to add canvas position
@@ -458,6 +456,8 @@ void main() {
       (rectCenterWorld.dy + topLeftWorld.dy) / 2,
     );
     
+    // Use transform and currentCanvasRect already obtained above
+    
     // Convert to screen coordinates (absolute)
     final dragStartScreenRelative = transform.worldToScreen(dragStartWorld);
     final dragStartScreen = Offset(
@@ -469,15 +469,21 @@ void main() {
     final dragDelta = const Offset(-200, -100); // Move 200 left, 100 up (away from circle)
     final newRectCenterWorld = dragStartWorld + dragDelta;  // Use dragStartWorld as base for accurate movement
     
-    // Convert new position to screen coordinates (absolute)
-    final newRectCenterScreenRelative = transform.worldToScreen(newRectCenterWorld);
+    // Calculate screen delta accounting for scale to ensure precise world movement
+    // screenDelta = worldDelta * scale (since worldToScreen multiplies by scale)
+    // This ensures 1:1 movement accounting for zoom percentage
+    final screenDelta = Offset(
+      dragDelta.dx * transform.scale,
+      dragDelta.dy * transform.scale,
+    );
     final newRectCenterScreen = Offset(
-      currentCanvasRect.left + newRectCenterScreenRelative.dx,
-      currentCanvasRect.top + newRectCenterScreenRelative.dy,
+      dragStartScreen.dx + screenDelta.dx,
+      dragStartScreen.dy + screenDelta.dy,
     );
     
-    print('🖱️ Dragging rectangle from midpoint (center-topLeft) $dragStartWorld (screen: $dragStartScreen) to $newRectCenterWorld (screen: $newRectCenterScreen)');
-    print('   Delta (world): $dragDelta');
+    print('🖱️ Dragging rectangle from $dragStartWorld (screen: $dragStartScreen) to $newRectCenterWorld (screen: $newRectCenterScreen)');
+    print('   Delta (world): $dragDelta, Delta (screen): $screenDelta');
+    print('   Scale: ${transform.scale}, Screen delta accounts for scale');
     print('   Center: $rectCenterWorld, TopLeft: $topLeftWorld, DragStart: $dragStartWorld');
 
     // Perform drag from midpoint to new position (use absolute screen coordinates)
