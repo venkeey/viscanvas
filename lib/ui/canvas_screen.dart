@@ -30,6 +30,7 @@ class _CanvasScreenState extends State<CanvasScreen> {
   final FocusNode _focusNode = FocusNode();
   String? _selectedShape;
   bool _showShapesPanel = false;
+  MouseCursor _currentCursor = SystemMouseCursors.basic;
 
   // Public getter for testing
   CanvasService get service => _service;
@@ -413,39 +414,59 @@ class _CanvasScreenState extends State<CanvasScreen> {
                     children: [
                       // Main Canvas
                       Positioned.fill(
-                        child: GestureDetector(
-                          key: const Key('canvasRoot'),
-                          onSecondaryTapDown: (details) {
-                            // Right-click: select object under cursor (if any) and open properties
-                            _service.onTap(details.localPosition);
-                            final selected = _service.objects.where((o) => o.isSelected).toList();
-                            if (selected.isNotEmpty) {
-                              _openObjectPropertiesPopup(selected.first);
-                            }
-                          },
-                          onTapDown: (details) {
-                            _service.onTap(details.localPosition);
-                            _handleCanvasTap();
-                          },
-                          onScaleStart: (details) {
-                            _service.onPanStart(details.localFocalPoint);
-                          },
-                          onScaleUpdate: (details) {
-                            if (details.scale != 1.0) {
-                              // Handle zoom/scale gestures
-                              _service.updateTransform(
-                                _service.transform.translation,
-                                _service.transform.scale * details.scale,
-                              );
+                        child: MouseRegion(
+                          cursor: _currentCursor,
+                          onHover: (event) {
+                            final cursor = _service.getCursorForHover(event.localPosition);
+                            if (cursor != null) {
+                              setState(() {
+                                _currentCursor = cursor;
+                              });
                             } else {
-                              // Handle pan gestures (when scale is 1.0)
-                              _service.onPanUpdate(details.localFocalPoint, details.focalPointDelta);
+                              setState(() {
+                                _currentCursor = SystemMouseCursors.basic;
+                              });
                             }
                           },
-                          onScaleEnd: (details) => _service.onPanEnd(),
-                          child: CustomPaint(
-                            painter: AdvancedCanvasPainter(_service),
-                            size: Size.infinite,
+                          onExit: (event) {
+                            setState(() {
+                              _currentCursor = SystemMouseCursors.basic;
+                            });
+                          },
+                          child: GestureDetector(
+                            key: const Key('canvasRoot'),
+                            onSecondaryTapDown: (details) {
+                              // Right-click: select object under cursor (if any) and open properties
+                              _service.onTap(details.localPosition);
+                              final selected = _service.objects.where((o) => o.isSelected).toList();
+                              if (selected.isNotEmpty) {
+                                _openObjectPropertiesPopup(selected.first);
+                              }
+                            },
+                            onTapDown: (details) {
+                              _service.onTap(details.localPosition);
+                              _handleCanvasTap();
+                            },
+                            onScaleStart: (details) {
+                              _service.onPanStart(details.localFocalPoint);
+                            },
+                            onScaleUpdate: (details) {
+                              if (details.scale != 1.0) {
+                                // Handle zoom/scale gestures
+                                _service.updateTransform(
+                                  _service.transform.translation,
+                                  _service.transform.scale * details.scale,
+                                );
+                              } else {
+                                // Handle pan gestures (when scale is 1.0)
+                                _service.onPanUpdate(details.localFocalPoint, details.focalPointDelta);
+                              }
+                            },
+                            onScaleEnd: (details) => _service.onPanEnd(),
+                            child: CustomPaint(
+                              painter: AdvancedCanvasPainter(_service),
+                              size: Size.infinite,
+                            ),
                           ),
                         ),
                       ),

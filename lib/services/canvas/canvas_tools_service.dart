@@ -54,6 +54,23 @@ class CanvasToolsService {
   Offset? get lastWorldPoint => _lastWorldPoint;
   CanvasObject? get tempObject => _tempObject;
 
+
+  /// Get the appropriate cursor for a hover position
+  /// Returns the cursor to show when hovering over resize handles on selected objects
+  MouseCursor? getCursorForHover(Offset screenPoint, Transform2D transform) {
+    // Only show resize cursor when select tool is active and objects are selected
+    final selected = _repository.getSelected();
+    if (selected.isEmpty) return null;
+
+    for (var obj in selected) {
+      final handle = _getResizeHandle(obj, screenPoint, transform);
+      if (handle != ResizeHandle.none) {
+        return _getCursorForResizeHandle(handle);
+      }
+    }
+    return null;
+  }
+
   void onPanStart(Offset screenPoint, ToolType currentTool, Transform2D transform, Color strokeColor, Color fillColor, double strokeWidth) {
     final worldPoint = transform.screenToWorld(screenPoint);
     _dragStart = worldPoint;
@@ -546,6 +563,44 @@ class CanvasToolsService {
           obj.updatePoints();
         }
       }
+    }
+  }
+
+  MouseCursor _getCursorForResizeHandle(ResizeHandle handle) {
+    switch (handle) {
+      // Corner handles - diagonal resize cursors
+      case ResizeHandle.topLeft:
+      case ResizeHandle.bottomRight:
+        return SystemMouseCursors.resizeUpLeftDownRight;
+      case ResizeHandle.topRight:
+      case ResizeHandle.bottomLeft:
+        return SystemMouseCursors.resizeUpRightDownLeft;
+      
+      // Edge handles - horizontal/vertical resize cursors
+      case ResizeHandle.topCenter:
+      case ResizeHandle.bottomCenter:
+        return SystemMouseCursors.resizeUpDown;
+      case ResizeHandle.centerLeft:
+      case ResizeHandle.centerRight:
+        return SystemMouseCursors.resizeLeftRight;
+      
+      // Additional edge handles
+      case ResizeHandle.top:
+      case ResizeHandle.bottom:
+        return SystemMouseCursors.resizeUpDown;
+      case ResizeHandle.left:
+      case ResizeHandle.right:
+        return SystemMouseCursors.resizeLeftRight;
+      
+      // Connector handles - use move cursor as they're being repositioned
+      case ResizeHandle.connectorStart:
+      case ResizeHandle.connectorEnd:
+      case ResizeHandle.connectorFirstQuarter:
+      case ResizeHandle.connectorThirdQuarter:
+        return SystemMouseCursors.move;
+      
+      default:
+        return SystemMouseCursors.basic;
     }
   }
 

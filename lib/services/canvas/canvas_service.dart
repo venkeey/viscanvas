@@ -111,6 +111,12 @@ class CanvasService extends ChangeNotifier {
   Offset? get lastWorldPoint => _toolsService.lastWorldPoint;
   CanvasObject? get tempObject => _toolsService.tempObject;
 
+  // Cursor management for resize handles
+  MouseCursor? getCursorForHover(Offset screenPoint) {
+    if (_currentTool != ToolType.select) return null;
+    return _toolsService.getCursorForHover(screenPoint, _transformService.transform);
+  }
+
   // Tool management
   void setTool(ToolType tool) {
     _currentTool = tool;
