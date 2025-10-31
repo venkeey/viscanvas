@@ -37,6 +37,7 @@ class CanvasToolsService {
   Rect? _initialBounds;
   Map<String, CanvasObject>? _preMoveState;
   Offset? _lastWorldPoint;
+  bool _isPanningEmptySpace = false; // Track if we're panning empty space
 
   // Text editing state
   StickyNote? _editingStickyNote;
@@ -129,6 +130,7 @@ class CanvasToolsService {
           CanvasLogger.canvasService('Resize handle $_resizeHandle on ${obj.runtimeType}(${obj.id})');
           _initialWorldPosition = obj.worldPosition;
           _initialBounds = obj.getBoundingRect();
+          _isPanningEmptySpace = false;
           return;
         }
       }
@@ -142,10 +144,12 @@ class CanvasToolsService {
           if (selectedText.isOnEdge(worldPoint)) {
             // Allow moving from edge
             _preMoveState = {selectedText.id: selectedText.clone()};
+            _isPanningEmptySpace = false;
             CanvasLogger.canvasService('Drag start on selected CanvasText from edge - will allow moving');
           } else {
             // Don't allow moving if drag starts from center
             _preMoveState = null;
+            _isPanningEmptySpace = false;
             CanvasLogger.canvasService('Drag start on selected CanvasText from center - moving disabled');
           }
           return;
@@ -161,12 +165,14 @@ class CanvasToolsService {
             _clearSelection();
             _selectObjectUseCase.execute(hitObj.id);
             _preMoveState = {hitObj.id: hitObj.clone()};
+            _isPanningEmptySpace = false;
             onSelectionChanged?.call();
             CanvasLogger.canvasService('Selected ${hitObj.runtimeType}(${hitObj.id}) from edge - will allow moving');
           } else {
             // Select but don't allow moving if drag is from center
             _clearSelection();
             _selectObjectUseCase.execute(hitObj.id);
+            _isPanningEmptySpace = false;
             onSelectionChanged?.call();
             CanvasLogger.canvasService('Selected ${hitObj.runtimeType}(${hitObj.id}) from center - moving disabled');
           }
@@ -174,14 +180,18 @@ class CanvasToolsService {
           _clearSelection();
           _selectObjectUseCase.execute(hitObj.id);
           _preMoveState = {hitObj.id: hitObj.clone()};
+          _isPanningEmptySpace = false;
           onSelectionChanged?.call();
           CanvasLogger.canvasService('Selected ${hitObj.runtimeType}(${hitObj.id})');
         }
         return;
       }
+      
+      // No object hit - start panning empty space
       _clearSelection();
       onSelectionChanged?.call();
-      CanvasLogger.canvasService('Selection cleared');
+      _isPanningEmptySpace = true;
+      CanvasLogger.canvasService('No object hit - starting pan on empty space');
     } else if (currentTool != ToolType.pan && currentTool != ToolType.text) {
       // Text tool creates objects on tap, not on pan start
       _tempObject = _createObject(worldPoint, currentTool, strokeColor, fillColor, strokeWidth);
@@ -205,6 +215,13 @@ class CanvasToolsService {
       } else if (_connectorService.currentFreehandConnector != null) {
         _connectorService.updateFreehandConnection(worldPoint);
       }
+      return;
+    }
+
+    // Handle panning empty space (when dragging on empty space in select mode)
+    if (currentTool == ToolType.select && _isPanningEmptySpace) {
+      final newTransform = transform.copyWith(translation: transform.translation + delta);
+      onTransformChanged?.call(newTransform);
       return;
     }
 
@@ -306,6 +323,7 @@ class CanvasToolsService {
     _initialWorldPosition = null;
     _initialBounds = null;
     _lastWorldPoint = null;
+    _isPanningEmptySpace = false;
   }
 
   void onTap(Offset screenPoint, Transform2D transform, ToolType currentTool, Color strokeColor, Color fillColor, double strokeWidth) {

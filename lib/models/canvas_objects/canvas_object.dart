@@ -49,9 +49,20 @@ abstract class CanvasObject {
     final rect = getBoundingRect();
     if (rect == Rect.zero) return;
 
-    final path = Path()..addRect(rect);
-    final transformedPath = path.transform(worldToScreen.storage);
-    final transformedRect = transformedPath.getBounds();
+    // Transform all four corners of the rectangle directly
+    final topLeft = MatrixUtils.transformPoint(worldToScreen, rect.topLeft);
+    final topRight = MatrixUtils.transformPoint(worldToScreen, rect.topRight);
+    final bottomLeft = MatrixUtils.transformPoint(worldToScreen, rect.bottomLeft);
+    final bottomRight = MatrixUtils.transformPoint(worldToScreen, rect.bottomRight);
+
+    // Calculate the bounding box from transformed corners
+    final corners = [topLeft, topRight, bottomLeft, bottomRight];
+    final minX = corners.map((p) => p.dx).reduce((a, b) => a < b ? a : b);
+    final maxX = corners.map((p) => p.dx).reduce((a, b) => a > b ? a : b);
+    final minY = corners.map((p) => p.dy).reduce((a, b) => a < b ? a : b);
+    final maxY = corners.map((p) => p.dy).reduce((a, b) => a > b ? a : b);
+
+    final transformedRect = Rect.fromLTRB(minX, minY, maxX, maxY);
 
     final borderPaint = Paint()
       ..color = Colors.blue

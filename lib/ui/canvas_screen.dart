@@ -136,10 +136,16 @@ class _CanvasScreenState extends State<CanvasScreen> {
         }
       }
       
-      // Delete selected with Shift+Delete (only when no modifier conflicts)
-      if (isShift && !isCtrl &&
+      // Delete selected objects
+      // Allow both plain Backspace/Delete and Shift+Delete
+      // Only delete if no TextField is focused (checked above) and there are selected objects
+      if (!isCtrl && 
           (event.logicalKey == LogicalKeyboardKey.delete || event.logicalKey == LogicalKeyboardKey.backspace)) {
-        _service.deleteSelected();
+        final selectedObjects = _service.objects.where((obj) => obj.isSelected).toList();
+        if (selectedObjects.isNotEmpty) {
+          _service.deleteSelected();
+          return; // Prevent further processing
+        }
       }
       
       // Escape key always works (no modifier needed)
