@@ -98,6 +98,7 @@ abstract class CanvasObject {
     final typeName = runtimeType.toString();
     if (typeName == 'CanvasRectangle') return 'Rectangle';
     if (typeName == 'CanvasCircle') return 'Circle';
+    if (typeName == 'CanvasTriangle') return 'Triangle';
     if (typeName == 'StickyNote') return 'Sticky Note';
     if (typeName == 'Connector') return 'Connector';
     if (typeName == 'DocumentBlock') return 'Document';

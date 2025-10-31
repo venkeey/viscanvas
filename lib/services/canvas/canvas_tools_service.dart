@@ -7,6 +7,7 @@ import '../../models/canvas_objects/canvas_object.dart';
 import '../../models/canvas_objects/freehand_path.dart';
 import '../../models/canvas_objects/canvas_rectangle.dart';
 import '../../models/canvas_objects/canvas_circle.dart';
+import '../../models/canvas_objects/canvas_triangle.dart';
 import '../../models/canvas_objects/sticky_note.dart';
 import '../../models/canvas_objects/document_block.dart';
 import '../../models/canvas_objects/connector.dart';
@@ -531,6 +532,15 @@ class CanvasToolsService {
           strokeWidth: strokeWidth,
           radius: 25, // Start with reasonable minimum radius
         );
+      case ToolType.triangle:
+        return CanvasTriangle(
+          id: id,
+          worldPosition: worldPoint,
+          strokeColor: strokeColor,
+          fillColor: fillColor,
+          strokeWidth: strokeWidth,
+          size: const Size(50, 50), // Start with reasonable minimum size
+        );
       case ToolType.sticky_note:
         return StickyNote(
           id: id,
@@ -625,6 +635,23 @@ class CanvasToolsService {
       // Adjust worldPosition: circle center should be at drag start
       // worldPosition = center - Offset(radius, radius)
       (_tempObject as CanvasCircle).worldPosition = _dragStart! - Offset(actualRadius, actualRadius);
+    } else if (_tempObject is CanvasTriangle) {
+      // Calculate bounding box from drag start to current point
+      final minX = min(_dragStart!.dx, worldPoint.dx);
+      final maxX = max(_dragStart!.dx, worldPoint.dx);
+      final minY = min(_dragStart!.dy, worldPoint.dy);
+      final maxY = max(_dragStart!.dy, worldPoint.dy);
+      
+      final width = maxX - minX;
+      final height = maxY - minY;
+      
+      // Update position to top-left of bounding box
+      (_tempObject as CanvasTriangle).worldPosition = Offset(minX, minY);
+      // Update size with minimum constraints
+      (_tempObject as CanvasTriangle).size = Size(
+        max(20.0, width), // Minimum width of 20px
+        max(20.0, height)  // Minimum height of 20px
+      );
     } else if (_tempObject is StickyNote) {
       // Calculate bounding box from drag start to current point
       final minX = min(_dragStart!.dx, worldPoint.dx);

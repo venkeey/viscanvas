@@ -10,6 +10,7 @@ enum ToolType {
   freehand,
   rectangle,
   circle,
+  triangle,
   line,
   text,
   // Miro-style tools

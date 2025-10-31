@@ -233,7 +233,7 @@ class _CanvasScreenState extends State<CanvasScreen> {
         _service.setTool(ToolType.circle);
         break;
       case 'triangle':
-        _service.setTool(ToolType.freehand); // Use freehand for now
+        _service.setTool(ToolType.triangle);
         break;
       case 'arrow':
         _service.setTool(ToolType.freehand); // Use freehand for now
