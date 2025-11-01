@@ -261,6 +261,10 @@ class CanvasService extends ChangeNotifier {
     _documentService.stopEditingStickyNote();
   }
 
+  void updateShapeText(String objectId, String newText) {
+    _toolsService.updateShapeText(objectId, newText);
+  }
+
   // Connector methods
   void confirmFreehandConnection() {
     _connectorService.confirmFreehandConnection();

@@ -9,6 +9,9 @@ import '../models/canvas_objects/canvas_object.dart';
 import '../models/canvas_objects/document_block.dart';
 import '../models/canvas_objects/canvas_text.dart';
 import '../models/canvas_objects/canvas_comment.dart';
+import '../models/canvas_objects/canvas_rectangle.dart';
+import '../models/canvas_objects/canvas_circle.dart';
+import '../models/canvas_objects/canvas_triangle.dart';
 import '../domain/canvas_domain.dart';
 import '../models/documents/document_content.dart';
 import '../models/documents/block_types.dart';
@@ -1219,6 +1222,18 @@ class _CanvasScreenState extends State<CanvasScreen> {
     final stickyTextController = isSticky ? TextEditingController(text: sticky!.text) : null;
     Color? stickyBg = isSticky ? sticky!.backgroundColor : null;
 
+    // Shape text support
+    final isShape = obj is CanvasRectangle || obj is CanvasCircle || obj is CanvasTriangle;
+    String? shapeText;
+    if (obj is CanvasRectangle) {
+      shapeText = (obj as CanvasRectangle).text;
+    } else if (obj is CanvasCircle) {
+      shapeText = (obj as CanvasCircle).text;
+    } else if (obj is CanvasTriangle) {
+      shapeText = (obj as CanvasTriangle).text;
+    }
+    final shapeTextController = isShape ? TextEditingController(text: shapeText ?? '') : null;
+
     showDialog(
       context: context,
       builder: (context) {
@@ -1283,6 +1298,20 @@ class _CanvasScreenState extends State<CanvasScreen> {
                         setState(() => stickyBg = c);
                         _service.setStickyNoteBackgroundColor(c);
                       }),
+                    ],
+                    if (isShape) ...[
+                      const SizedBox(height: 12),
+                      const Text('Shape Text'),
+                      TextField(
+                        controller: shapeTextController,
+                        maxLines: null,
+                        decoration: const InputDecoration(
+                          hintText: 'Enter text for shape...',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        onChanged: (v) => _service.updateShapeText(obj.id, v),
+                      ),
                     ],
                   ],
                 ),

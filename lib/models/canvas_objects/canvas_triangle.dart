@@ -5,6 +5,9 @@ import '../../domain/canvas_domain.dart';
 
 class CanvasTriangle extends CanvasObject {
   List<Offset> vertices; // 3 vertices: [top, bottomLeft, bottomRight] - relative to worldPosition
+  String text;
+  double fontSize;
+  Color textColor;
 
   CanvasTriangle({
     required super.id,
@@ -14,6 +17,9 @@ class CanvasTriangle extends CanvasObject {
     super.strokeWidth,
     super.isSelected,
     required this.vertices,
+    this.text = '',
+    this.fontSize = 16.0,
+    this.textColor = Colors.black,
   }) {
     // Ensure we have exactly 3 vertices
     if (vertices.length != 3) {
@@ -71,6 +77,45 @@ class CanvasTriangle extends CanvasObject {
         ..style = PaintingStyle.stroke
         ..strokeWidth = strokeWidth / worldToScreen.getScaleFactor(),
     );
+
+    // Draw centered text if text is not empty
+    if (text.isNotEmpty) {
+      final bounds = getBoundingRect();
+      if (bounds.width > 16 && bounds.height > 16) {
+        final scaledFontSize = fontSize / worldToScreen.getScaleFactor();
+        final maxWidth = (bounds.width - 16).clamp(1.0, double.infinity);
+
+        final textPainter = TextPainter(
+          text: TextSpan(
+            text: text,
+            style: TextStyle(
+              color: textColor,
+              fontSize: scaledFontSize.clamp(8.0, 72.0),
+              fontFamily: 'Arial',
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+          textAlign: TextAlign.center,
+          maxLines: null,
+        );
+
+        textPainter.layout(maxWidth: maxWidth);
+
+        // Calculate centroid of triangle
+        final worldVertices = vertices.map((v) => worldPosition + v).toList();
+        final centroid = Offset(
+          (worldVertices[0].dx + worldVertices[1].dx + worldVertices[2].dx) / 3,
+          (worldVertices[0].dy + worldVertices[1].dy + worldVertices[2].dy) / 3,
+        );
+
+        final textOffset = Offset(
+          centroid.dx - textPainter.width / 2,
+          centroid.dy - textPainter.height / 2,
+        );
+
+        textPainter.paint(canvas, textOffset);
+      }
+    }
   }
 
   @override
@@ -157,6 +202,65 @@ class CanvasTriangle extends CanvasObject {
     invalidateCache();
   }
 
+  /// Expands the triangle to fit the text content
+  void expandToFitText() {
+    if (text.isEmpty || vertices.length != 3) return;
+
+    final bounds = getBoundingRect();
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          color: textColor,
+          fontSize: fontSize,
+          fontFamily: 'Arial',
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+      textAlign: TextAlign.center,
+      maxLines: null,
+    );
+
+    // Measure text with current width constraint
+    final maxWidth = (bounds.width - 16).clamp(1.0, double.infinity);
+    textPainter.layout(maxWidth: maxWidth);
+
+    // Calculate required dimensions
+    final requiredWidth = textPainter.width + 16;
+    final requiredHeight = textPainter.height + 16;
+
+    if (requiredWidth > bounds.width || requiredHeight > bounds.height) {
+      // Calculate scale factors
+      final scaleX = requiredWidth / max(bounds.width, 1.0);
+      final scaleY = requiredHeight / max(bounds.height, 1.0);
+      final scale = max(scaleX, scaleY);
+
+      // Calculate centroid of triangle (world coordinates)
+      final worldVertices = vertices.map((v) => worldPosition + v).toList();
+      final centroid = Offset(
+        (worldVertices[0].dx + worldVertices[1].dx + worldVertices[2].dx) / 3,
+        (worldVertices[0].dy + worldVertices[1].dy + worldVertices[2].dy) / 3,
+      );
+
+      // Scale vertices relative to centroid
+      vertices = vertices.map((v) {
+        final worldVertex = worldPosition + v;
+        final relativeToCentroid = worldVertex - centroid;
+        final scaled = Offset(relativeToCentroid.dx * scale, relativeToCentroid.dy * scale);
+        final newWorldVertex = centroid + scaled;
+        return newWorldVertex - worldPosition; // Convert back to relative
+      }).toList();
+
+      // Adjust worldPosition to maintain approximate top-left position
+      final newBounds = calculateBoundingRect();
+      final offsetX = bounds.left - newBounds.left;
+      final offsetY = bounds.top - newBounds.top;
+      worldPosition = worldPosition + Offset(offsetX, offsetY);
+      
+      invalidateCache();
+    }
+  }
+
   @override
   CanvasObject clone() {
     return CanvasTriangle(
@@ -167,6 +271,9 @@ class CanvasTriangle extends CanvasObject {
       strokeWidth: strokeWidth,
       isSelected: false,
       vertices: List.from(vertices),
+      text: text,
+      fontSize: fontSize,
+      textColor: textColor,
     );
   }
 }

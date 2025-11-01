@@ -433,6 +433,31 @@ class CanvasToolsService {
     onObjectModified?.call();
   }
 
+  void updateShapeText(String objectId, String newText) {
+    final obj = _repository.getById(objectId);
+    if (obj == null) return;
+
+    if (obj is CanvasRectangle) {
+      final oldState = obj.clone();
+      obj.text = newText;
+      obj.expandToFitText();
+      _commandHistory.execute(ModifyObjectCommand(_repository, obj.id, oldState, obj));
+      onObjectModified?.call();
+    } else if (obj is CanvasCircle) {
+      final oldState = obj.clone();
+      obj.text = newText;
+      obj.expandToFitText();
+      _commandHistory.execute(ModifyObjectCommand(_repository, obj.id, oldState, obj));
+      onObjectModified?.call();
+    } else if (obj is CanvasTriangle) {
+      final oldState = obj.clone();
+      obj.text = newText;
+      obj.expandToFitText();
+      _commandHistory.execute(ModifyObjectCommand(_repository, obj.id, oldState, obj));
+      onObjectModified?.call();
+    }
+  }
+
   // ===== PRIVATE METHODS =====
 
   void _clearSelection() {

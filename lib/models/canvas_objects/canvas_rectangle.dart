@@ -5,6 +5,9 @@ import '../../domain/canvas_domain.dart';
 
 class CanvasRectangle extends CanvasObject {
   Size size;
+  String text;
+  double fontSize;
+  Color textColor;
 
   CanvasRectangle({
     required super.id,
@@ -14,6 +17,9 @@ class CanvasRectangle extends CanvasObject {
     super.strokeWidth,
     super.isSelected,
     required this.size,
+    this.text = '',
+    this.fontSize = 16.0,
+    this.textColor = Colors.black,
   });
 
   @override
@@ -43,6 +49,37 @@ class CanvasRectangle extends CanvasObject {
         ..style = PaintingStyle.stroke
         ..strokeWidth = strokeWidth / worldToScreen.getScaleFactor(),
     );
+
+    // Draw centered text if text is not empty
+    if (text.isNotEmpty && size.width > 16 && size.height > 16) {
+      final scaledFontSize = fontSize / worldToScreen.getScaleFactor();
+      final maxWidth = (size.width - 16).clamp(1.0, double.infinity);
+
+      final textPainter = TextPainter(
+        text: TextSpan(
+          text: text,
+          style: TextStyle(
+            color: textColor,
+            fontSize: scaledFontSize.clamp(8.0, 72.0),
+            fontFamily: 'Arial',
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+        textAlign: TextAlign.center,
+        maxLines: null,
+      );
+
+      textPainter.layout(maxWidth: maxWidth);
+
+      // Calculate center of rectangle
+      final center = worldPosition + Offset(size.width / 2, size.height / 2);
+      final textOffset = Offset(
+        center.dx - textPainter.width / 2,
+        center.dy - textPainter.height / 2,
+      );
+
+      textPainter.paint(canvas, textOffset);
+    }
   }
 
   @override
@@ -93,6 +130,41 @@ class CanvasRectangle extends CanvasObject {
     invalidateCache();
   }
 
+  /// Expands the rectangle to fit the text content
+  void expandToFitText() {
+    if (text.isEmpty) return;
+
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          color: textColor,
+          fontSize: fontSize,
+          fontFamily: 'Arial',
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+      textAlign: TextAlign.center,
+      maxLines: null,
+    );
+
+    // Measure text with current width constraint
+    final maxWidth = (size.width - 16).clamp(1.0, double.infinity);
+    textPainter.layout(maxWidth: maxWidth);
+
+    // Check if we need to expand
+    final requiredWidth = textPainter.width + 16;
+    final requiredHeight = textPainter.height + 16;
+
+    if (requiredWidth > size.width || requiredHeight > size.height) {
+      size = Size(
+        max(size.width, requiredWidth),
+        max(size.height, requiredHeight),
+      );
+      invalidateCache();
+    }
+  }
+
   @override
   CanvasObject clone() {
     return CanvasRectangle(
@@ -102,6 +174,9 @@ class CanvasRectangle extends CanvasObject {
       fillColor: fillColor,
       strokeWidth: strokeWidth,
       size: size,
+      text: text,
+      fontSize: fontSize,
+      textColor: textColor,
     );
   }
 }
