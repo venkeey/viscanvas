@@ -78,7 +78,9 @@ class CanvasService extends ChangeNotifier {
       notifyListeners();
     };
     _toolsService.onSelectionChanged = () => notifyListeners();
-    _toolsService.onObjectCreated = () => notifyListeners();
+    _toolsService.onObjectCreated = () {
+      notifyListeners();
+    };
     _toolsService.onObjectModified = () => notifyListeners();
     
     _connectorService.onConnectorStateChanged = () => notifyListeners();
@@ -182,6 +184,13 @@ class CanvasService extends ChangeNotifier {
 
   void deleteSelected() {
     _toolsService.deleteSelected();
+    notifyListeners();
+  }
+
+  // Add object to canvas programmatically
+  void addObject(CanvasObject object) {
+    _commandHistory.execute(CreateObjectCommand(_repository, object));
+    _toolsService.onObjectCreated?.call();
     notifyListeners();
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import '../services/canvas/canvas_service.dart';
 import '../widgets/miro_sidebar.dart';
 import '../widgets/shapes_panel.dart';
@@ -19,6 +20,10 @@ import 'canvas_widgets.dart';
 import 'canvas_painter.dart';
 import 'document_editor_overlay.dart';
 import 'draggable_right_panel.dart';
+import '../services/document_service.dart';
+import '../services/templates/template_service.dart';
+import '../services/templates/template_repository.dart';
+import '../ui/template_library_screen.dart';
 
 // ===== 4. PRESENTATION LAYER =====
 
@@ -257,20 +262,102 @@ class _CanvasScreenState extends State<CanvasScreen> {
     }
   }
 
-  void _showAITemplatesDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('AI Templates'),
-        content: const Text('AI-powered templates and suggestions coming soon!'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
+  void _showAITemplatesDialog() async {
+    // Initialize template services if not already done
+    try {
+      // Get application documents directory
+      final directory = await getApplicationDocumentsDirectory();
+      final templatesDir = '${directory.path}/templates';
+      final thumbnailsDir = '${directory.path}/templates/thumbnails';
+      
+      // Initialize document service
+      final documentService = DocumentServiceImpl();
+      
+      // Initialize template repository
+      final repository = LocalTemplateRepository(
+        templatesDirectory: templatesDir,
+        thumbnailsDirectory: thumbnailsDir,
+      );
+      
+      // Initialize template service
+      final templateService = TemplateServiceImpl(
+        repository: repository,
+      );
+      
+      // Get current canvas position for placing the template
+      final canvasPosition = Offset.zero; // You can get this from transform if needed
+      
+      // Open template library
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => TemplateLibraryScreen(
+            templateService: templateService,
+            onTemplateSelected: (content) async {
+              // Template was selected and instantiated
+              // Create document block from the instantiated content
+              // Note: The TemplateLibraryScreen already handles instantiation
+              // We just need to create the document block on the canvas
+              try {
+                // Use document service to store the content
+                documentService.updateDocument(content.id, content);
+                await documentService.saveDocument(content.id);
+                
+                // Create document block
+                final docBlock = DocumentBlock(
+                  id: 'block_${content.id}',
+                  worldPosition: canvasPosition,
+                  strokeColor: Colors.blue,
+                  documentId: content.id,
+                  content: content,
+                  viewMode: DocumentViewMode.preview,
+                  size: const Size(400, 300),
+                );
+                
+                // Add to canvas
+                _service.addObject(docBlock);
+                
+                // Optionally open editor
+                _service.onOpenDocumentEditor?.call(docBlock);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: const Text('Template applied successfully!'),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error applying template: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
           ),
-        ],
-      ),
-    );
+        ),
+      );
+    } catch (e) {
+      // Show error if template system fails to initialize
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Error'),
+            content: Text('Failed to open template library: $e'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    }
   }
 
   void _showUploadDialog() {
